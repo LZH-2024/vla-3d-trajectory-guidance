@@ -102,6 +102,7 @@ def main() -> int:
             f"MUJOCO_GL must be explicitly set to {libero_config['render_backend']!r}, "
             f"got {os.environ.get('MUJOCO_GL')!r}"
         )
+    os.environ["MPLBACKEND"] = libero_config["matplotlib_backend"]
 
     suite_name = args.suite or probe_config["suite"]
     task_id = probe_config["task_id"] if args.task_id is None else args.task_id
@@ -391,6 +392,7 @@ def main() -> int:
                 "assets_revision": assets_revision,
                 "libero_path_config": str(libero_path_config),
                 "MUJOCO_GL": os.environ["MUJOCO_GL"],
+                "MPLBACKEND": os.environ["MPLBACKEND"],
                 "MUJOCO_EGL_DEVICE_ID": os.environ.get("MUJOCO_EGL_DEVICE_ID"),
             },
             "timing_seconds": {

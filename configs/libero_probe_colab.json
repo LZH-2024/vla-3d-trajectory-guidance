@@ -22,6 +22,7 @@
     "config_dir": "/content/.libero_vla_probe",
     "datasets_dir": "/content/libero_datasets",
     "render_backend": "egl",
+    "matplotlib_backend": "Agg",
     "image_convention": "opencv"
   },
   "probe": {

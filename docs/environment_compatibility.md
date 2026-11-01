@@ -77,6 +77,7 @@
 - 只安装 LeRobot `[libero]` extra，不启动 SmolVLA 训练；
 - 安装 editable checkout 时使用 uv `--no-sources`，避免 LeRobot 的开发期 `tool.uv.sources` 把参考 CUDA TorchCodec 静默改成 CPU wheel；实际依赖仍来自固定 commit 的标准项目 metadata；
 - `MUJOCO_GL=egl` 由运行命令显式传入；
+- 独立子进程固定 `MPLBACKEND=Agg`，防止继承 Notebook 内核的 `matplotlib_inline` backend；该 backend 只用于无界面导入与静态输出；
 - `nvidia-npp-cu12` 的 wheel 把 `libnppicc.so.12` 放在虚拟环境内部；03 Notebook 会把该目录显式加入子进程 `LD_LIBRARY_PATH`，环境检查脚本也会在缺失时用同一解释器自动 re-exec；
 - 用独立精确版本脚本阻止核心版本漂移。
 

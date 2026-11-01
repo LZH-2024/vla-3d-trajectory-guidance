@@ -102,6 +102,7 @@ def main() -> int:
             f"MUJOCO_GL must be explicitly set to {libero['render_backend']!r}, "
             f"got {os.environ.get('MUJOCO_GL')!r}"
         )
+    os.environ["MPLBACKEND"] = libero["matplotlib_backend"]
     npp_dir, npp_libraries = ensure_npp_loader_path()
 
     expected_versions = {
@@ -170,6 +171,7 @@ def main() -> int:
         "platform": platform.platform(),
         "environment": {
             "MUJOCO_GL": os.environ["MUJOCO_GL"],
+            "MPLBACKEND": os.environ["MPLBACKEND"],
             "MUJOCO_EGL_DEVICE_ID": os.environ.get("MUJOCO_EGL_DEVICE_ID"),
             "CUDA_VISIBLE_DEVICES": os.environ.get("CUDA_VISIBLE_DEVICES"),
             "LIBERO_CONFIG_PATH": os.environ["LIBERO_CONFIG_PATH"],
