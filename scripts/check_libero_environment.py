@@ -63,6 +63,8 @@ def main() -> int:
     libero = config["libero"]
     core = core_config["reference_core"]
 
+    print("[1/6] Checking target interpreter and render backend...", flush=True)
+
     expected_python = (Path(libero["env_dir"]) / "bin" / "python").resolve()
     if Path(sys.executable).resolve() != expected_python:
         raise RuntimeError(f"wrong interpreter: got {sys.executable}, expected {expected_python}")
@@ -91,6 +93,7 @@ def main() -> int:
         "mujoco": libero["mujoco_version"],
         "lerobot": libero["repo_version"],
     }
+    print("[2/6] Checking protected distribution versions...", flush=True)
     actual_versions = {name: distribution_version(name) for name in expected_versions}
     mismatches = {
         name: {"expected": expected_versions[name], "actual": actual}
@@ -99,7 +102,9 @@ def main() -> int:
     }
     if mismatches:
         raise RuntimeError(f"protected dependency versions changed: {mismatches}")
+    print(json.dumps(actual_versions, ensure_ascii=False, indent=2), flush=True)
 
+    print("[3/6] Checking the pinned LeRobot checkout...", flush=True)
     checkout_dir = Path(libero["checkout_dir"]).resolve()
     checkout_commit = subprocess.check_output(
         ["git", "-C", str(checkout_dir), "rev-parse", "HEAD"], text=True
@@ -112,6 +117,7 @@ def main() -> int:
     os.environ["LIBERO_CONFIG_PATH"] = str(Path(libero["config_dir"]).resolve())
     libero_config_path = prepare_libero_config(libero["config_dir"], libero["datasets_dir"])
 
+    print("[4/6] Importing MuJoCo, robosuite, LIBERO, and protected ML packages...", flush=True)
     import mujoco
     import numpy as np
     import robomimic
@@ -126,6 +132,7 @@ def main() -> int:
         get_camera_intrinsic_matrix,
         get_real_depth_map,
     )
+    print("[5/6] Imports passed; recording environment metadata...", flush=True)
 
     record: dict[str, Any] = {
         "schema_version": 1,
@@ -185,6 +192,7 @@ def main() -> int:
         record["nvidia_smi_error"] = str(exc)
 
     if args.gpu_test:
+        print("[6/6] Running the CUDA smoke test...", flush=True)
         if not torch.cuda.is_available():
             raise RuntimeError("CUDA is unavailable; GPU smoke test was not run")
         left = torch.randn((512, 512), device="cuda")
@@ -200,6 +208,7 @@ def main() -> int:
     ).resolve()
     write_json(output, record)
     print(json.dumps(record, ensure_ascii=False, indent=2, allow_nan=False))
+    print(f"Environment record: {output}", flush=True)
     return 0
 
 
