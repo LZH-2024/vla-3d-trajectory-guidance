@@ -10,7 +10,7 @@
 - [ ] **Stage A**：在下一次 GPU 会话复核两个环境、checkpoint、probe 与标定。
 - [ ] **Stage B**：运行 04 真实 Planner；检查 overlay、world XYZ、异常跳跃、EEF 偏离与耗时。
 - [ ] 若 B 明显不可用：先分析 Planner/scene mismatch，不进入低层训练。
-- [ ] 准备固定 LeRobot preprocessor 输出的单个因果 batch artifact，不使用未来专家轨迹。
+- [x] 05 自动准备固定 LeRobot preprocessor 输出的单个因果 smoke batch artifact，不使用未来专家轨迹，并明确标记 synthetic action/gripper 限制。
 - [ ] **Stage C**：检查真实 SmolVLA E0/E1/E2 forward/backward、adapter 梯度、动作维度与显存。
 - [ ] 根据 C 的真实结果补齐 dataset/preprocessor 训练装配，避免提前猜接口。
 - [ ] **Stage D**：只做单任务、少量 step 和少量 rollout；确认 checkpoint/恢复与结果记录。

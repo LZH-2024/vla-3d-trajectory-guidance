@@ -8,6 +8,8 @@
 
 每次只执行一个阶段。`acceptance_ledger.json` 要求前置阶段全部 `passed`，否则后续命令在加载模型前拒绝执行。失败会在 `stage_x/attempt_NNN/` 保存 `failure.json` 和日志；同一 run directory 可修复后重试，attempts 会增加且旧证据保留。已通过阶段不会覆盖。
 
+验收入口会按目标解释器自动把其虚拟环境中的 `nvidia/npp/lib` 前置到子进程的 `LD_LIBRARY_PATH`，避免 Notebook 默认内核无法解析 `libnppicc.so.12`。`check_planner_environment.py` 直接运行时也会在导入 TorchCodec 前自检，并在需要时带正确路径重新执行一次；这不安装或更改任何受保护依赖版本。
+
 ## A：环境与数据
 
 - `/content/.venv_planner/bin/python`：受保护版本、固定 3D HAMSTER checkout、CUDA smoke；
@@ -31,19 +33,22 @@ B 调用 `/content/.venv_planner/bin/python scripts/run_libero_planner_single_fr
 
 ## C：真实 SmolVLA 冒烟
 
-C 默认没有 policy 和 batch 路径，因此不会下载或自动启动。先设置：
+直接运行 05 的 Stage C 单元。它会按顺序：
 
-    export VLA_SMOLVLA_POLICY_PATH=/content/models/<local-smolvla>
-    export VLA_SMOLVLA_BATCH_ARTIFACT=/content/.../<preprocessed-batch>
+1. 在现有 `/content/.venv` 中安装固定 LeRobot commit 的 `[libero,smolvla]` extras，并重新核对受保护版本；
+2. 断点续传 `lerobot/smolvla_libero@a24f1f380461b665158d52acd140152c79e8b36d`；
+3. 固定并缓存 SmolVLM config/tokenizer/processor 支持文件，不重复下载其大权重；
+4. 从已通过的 Stage B 自动定位双相机观测、EEF 和 prediction trajectory，生成已预处理、因果检查的 tensor batch artifact；
+5. 自动设置两个 Stage C 路径并用 `/content/.venv/bin/python` 依次执行 E0/E1/E2。
 
-随后用 `/content/.venv/bin/python` 一次加载本地 SmolVLA，依次执行 E0/E1/E2：
+检查内容：
 
 - 真实 forward 与原 loss；
 - backward 与 adapter 梯度；
 - `predict_action_chunk`、动作维度和有限值；
 - 各配置耗时、GPU 和显存峰值。
 
-C 不做 optimizer step、checkpoint 更新或 rollout。batch 必须已由固定版本的 policy preprocessor 处理，并带 causality metadata。
+C 不做 optimizer step、checkpoint 更新或 rollout。smoke batch 中的零 action target 和缺失 gripper qpos 的零填充只用于真实模型接口/反向冒烟，metadata 明确禁止把它当成训练或评估数据。正式训练仍必须使用正确示范 action 和完整状态。
 
 ## D / E
 

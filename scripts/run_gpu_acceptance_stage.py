@@ -18,6 +18,7 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from trajectory_guidance.experiment import RunLedger
+from trajectory_guidance.runtime_environment import environment_with_venv_npp
 
 
 def parse_args() -> argparse.Namespace:
@@ -93,6 +94,9 @@ def _stage_a(
         if not interpreter.is_file():
             raise FileNotFoundError(f"target interpreter is missing: {interpreter}")
 
+    planner_subprocess_env = environment_with_venv_npp(planner_python)
+    smolvla_subprocess_env = environment_with_venv_npp(smolvla_python)
+
     planner_env_output = stage_dir / "planner_environment.json"
     _run(
         [
@@ -107,14 +111,14 @@ def _stage_a(
             "--gpu-test",
         ],
         stage_dir / "planner_environment.log",
+        env=planner_subprocess_env,
     )
 
     libero_env_output = stage_dir / "libero_environment.json"
     libero_config = _resolve_project_path(project_root, settings["libero_config"])
     libero_config_payload = json.loads(libero_config.read_text(encoding="utf-8"))
     libero_settings = libero_config_payload["libero"]
-    subprocess_env = os.environ.copy()
-    subprocess_env.update(
+    smolvla_subprocess_env.update(
         {
             "MUJOCO_GL": str(libero_settings["render_backend"]),
             "MPLBACKEND": str(libero_settings["matplotlib_backend"]),
@@ -134,7 +138,7 @@ def _stage_a(
             "--gpu-test",
         ],
         stage_dir / "libero_environment.log",
-        env=subprocess_env,
+        env=smolvla_subprocess_env,
     )
 
     probe_override = os.environ.get("VLA_LIBERO_PROBE_DIR") or settings.get("probe_dir")
@@ -156,6 +160,7 @@ def _stage_a(
             str(input_output),
         ],
         stage_dir / "planner_input.log",
+        env=planner_subprocess_env,
     )
 
     checkpoint_manifest_path = _resolve_project_path(
@@ -232,6 +237,7 @@ def _stage_b(
             str(output_dir),
         ],
         stage_dir / "planner.log",
+        env=environment_with_venv_npp(Path(config["planner_python"])),
     )
     summary_path = output_dir / "run_summary.json"
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
@@ -287,6 +293,7 @@ def _stage_c(
             str(output),
         ],
         stage_dir / "smolvla_smoke.log",
+        env=environment_with_venv_npp(Path(config["smolvla_python"])),
     )
     result = json.loads(output.read_text(encoding="utf-8"))
     if result.get("all_passed") is not True:

@@ -13,3 +13,7 @@ hf-libero==0.1.4
 robosuite==1.4.0
 robomimic==0.2.0
 mujoco==3.8.1
+
+# SmolVLA optional dependencies used by Stage C.
+accelerate==1.14.0
+num2words==0.5.14

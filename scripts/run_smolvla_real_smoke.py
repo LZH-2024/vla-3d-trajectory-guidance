@@ -221,14 +221,29 @@ def main() -> int:
     assert_experiments_comparable(configs)
     os.environ["HF_HUB_OFFLINE"] = "1"
     os.environ["TRANSFORMERS_OFFLINE"] = "1"
+    from lerobot.configs import PreTrainedConfig
     from lerobot.policies.smolvla.modeling_smolvla import SmolVLAPolicy
+
+    runtime_policy_config = PreTrainedConfig.from_pretrained(
+        str(policy_path), local_files_only=True
+    )
+    checkpoint_load_vlm_weights = bool(
+        getattr(runtime_policy_config, "load_vlm_weights", False)
+    )
+    # The local policy safetensor already contains the VLM parameters.  Building
+    # the module from config avoids downloading/loading the same base VLM weights
+    # a second time before the checkpoint immediately replaces them.
+    runtime_policy_config.load_vlm_weights = False
+    runtime_policy_config.device = str(device)
 
     torch.cuda.empty_cache()
     torch.cuda.reset_peak_memory_stats()
     torch.cuda.synchronize()
     load_started = time.perf_counter()
     policy = SmolVLAPolicy.from_pretrained(
-        str(policy_path), local_files_only=True
+        str(policy_path),
+        config=runtime_policy_config,
+        local_files_only=True,
     ).to(device)
     torch.cuda.synchronize()
     load_seconds = time.perf_counter() - load_started
@@ -243,6 +258,12 @@ def main() -> int:
         "scope": "real_smolvla_forward_backward_smoke_no_optimizer_step_no_rollout",
         "lerobot_commit_expected": "3f797de5952432284a7c77ad2760218cb74e2f26",
         "policy_path": str(policy_path),
+        "checkpoint_load_vlm_weights": checkpoint_load_vlm_weights,
+        "runtime_load_vlm_weights": False,
+        "runtime_load_note": (
+            "VLM modules were initialized from the pinned local config and then fully "
+            "populated from the local SmolVLA policy checkpoint."
+        ),
         "batch_artifact": str(args.batch_artifact.resolve()),
         "model_load_seconds": load_seconds,
         "python": {"version": platform.python_version(), "executable": sys.executable},

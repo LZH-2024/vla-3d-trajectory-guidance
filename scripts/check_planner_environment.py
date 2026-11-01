@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import importlib.metadata
 import json
+import os
 import platform
 import subprocess
 import sys
@@ -13,6 +14,41 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+
+def ensure_npp_loader_path() -> tuple[Path, list[str]]:
+    """Re-exec once so TorchCodec can resolve the venv's NVIDIA NPP libraries."""
+
+    python_dir = f"python{sys.version_info.major}.{sys.version_info.minor}"
+    npp_dir = (
+        Path(sys.prefix)
+        / "lib"
+        / python_dir
+        / "site-packages"
+        / "nvidia"
+        / "npp"
+        / "lib"
+    )
+    libraries = sorted(str(path) for path in npp_dir.glob("libnppicc.so*"))
+    if not libraries:
+        raise RuntimeError(f"NVIDIA NPP library was not found under {npp_dir}")
+
+    current = os.environ.get("LD_LIBRARY_PATH", "")
+    paths = [path for path in current.split(os.pathsep) if path]
+    if str(npp_dir) not in paths:
+        marker = "TRAJECTORY_GUIDANCE_PLANNER_NPP_REEXEC"
+        if os.environ.get(marker) == "1":
+            raise RuntimeError(
+                f"NPP directory is still absent after re-exec: {npp_dir}"
+            )
+        updated_env = os.environ.copy()
+        updated_env["LD_LIBRARY_PATH"] = str(npp_dir) + (
+            os.pathsep + current if current else ""
+        )
+        updated_env[marker] = "1"
+        print(f"Re-executing with NPP loader path: {npp_dir}", flush=True)
+        os.execve(sys.executable, [sys.executable, *sys.argv], updated_env)
+    return npp_dir, libraries
 
 
 def distribution_version(name: str) -> str:
@@ -72,6 +108,7 @@ def main() -> int:
             f"Python version mismatch: got {platform.python_version()}, "
             f"expected {config['python_version']}"
         )
+    npp_dir, npp_libraries = ensure_npp_loader_path()
 
     expected_versions = {
         "torch": core["torch"],
@@ -144,18 +181,7 @@ def main() -> int:
         },
         "gpu": gpu_info(torch),
     }
-    npp_dir = (
-        Path(sys.prefix)
-        / "lib"
-        / "python3.12"
-        / "site-packages"
-        / "nvidia"
-        / "npp"
-        / "lib"
-    )
-    npp_libraries = sorted(str(path) for path in npp_dir.glob("libnppicc.so*"))
-    if not npp_libraries:
-        raise RuntimeError(f"NVIDIA NPP library was not found under {npp_dir}")
+    record["npp_library_dir"] = str(npp_dir)
     record["npp_libraries"] = npp_libraries
     try:
         record["nvidia_smi"] = subprocess.check_output(

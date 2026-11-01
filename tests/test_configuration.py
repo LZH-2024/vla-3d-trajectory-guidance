@@ -52,6 +52,8 @@ class ConfigurationTests(unittest.TestCase):
         for package, version in expected.items():
             with self.subTest(package=package):
                 self.assertIn(f"{package}=={version}", self.constraints)
+        self.assertIn("accelerate==1.14.0", self.constraints)
+        self.assertIn("num2words==0.5.14", self.constraints)
 
     def test_single_frame_bridge_reuses_isolated_configs(self) -> None:
         self.assertEqual(self.bridge["planner_config"], "configs/planner_colab.json")
@@ -78,6 +80,18 @@ class ConfigurationTests(unittest.TestCase):
             "/content/.venv/bin/python",
         )
         self.assertIsNone(self.gpu_acceptance["stage_c"]["policy_path"])
+        self.assertEqual(
+            self.gpu_acceptance["stage_c"]["policy_repo_id"],
+            "lerobot/smolvla_libero",
+        )
+        self.assertEqual(
+            self.gpu_acceptance["stage_c"]["policy_revision"],
+            "a24f1f380461b665158d52acd140152c79e8b36d",
+        )
+        self.assertEqual(
+            self.gpu_acceptance["stage_c"]["vlm_revision"],
+            "7b375e1b73b11138ff12fe22c8f2822d8fe03467",
+        )
         self.assertIsNone(self.gpu_acceptance["stage_d"]["command"])
         self.assertIsNone(self.gpu_acceptance["stage_e"]["command"])
         self.assertFalse(self.gpu_acceptance["persistence"]["enabled"])

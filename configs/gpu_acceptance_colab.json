@@ -18,8 +18,16 @@
   "stage_c": {
     "policy_path": null,
     "batch_artifact": null,
+    "policy_repo_id": "lerobot/smolvla_libero",
+    "policy_revision": "a24f1f380461b665158d52acd140152c79e8b36d",
+    "policy_cache_dir": "/content/models/smolvla_libero/a24f1f380461b665158d52acd140152c79e8b36d",
+    "vlm_repo_id": "HuggingFaceTB/SmolVLM2-500M-Video-Instruct",
+    "vlm_revision": "7b375e1b73b11138ff12fe22c8f2822d8fe03467",
+    "accelerate_version": "1.14.0",
+    "num2words_version": "0.5.14",
+    "num_waypoints": 8,
     "device": "cuda:0",
-    "note": "Set local paths or VLA_SMOLVLA_POLICY_PATH and VLA_SMOLVLA_BATCH_ARTIFACT. No download is attempted."
+    "note": "05 prepares the pinned local policy and a causality-checked smoke batch after Stage B, then sets both paths automatically."
   },
   "stage_d": {
     "command": null,

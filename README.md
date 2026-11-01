@@ -146,11 +146,11 @@ E2 第一版特征只有工作空间越界比例、相邻路点跳跃和当前 E
 
 1. **A 环境与数据**：两个解释器、固定版本、CUDA、checkpoint revision、RGB-D 与标定。
 2. **B 高层可行性**：执行一次 04 真实推理，保存图、world XYZ、诊断、耗时和统一缓存；结果明显不可用则停止。
-3. **C SmolVLA 冒烟**：本地 policy + 已预处理 batch，依次检查 E0/E1/E2 真实 forward/backward、动作维度、梯度、耗时和显存；不做 optimizer step。
+3. **C SmolVLA 冒烟**：05 自动安装固定 `smolvla` extra、断点续传固定的 `lerobot/smolvla_libero` checkpoint，并由 B 的观测与 prediction 轨迹生成已预处理、因果检查的 smoke batch；随后检查 E0/E1/E2 真实 forward/backward、动作维度、梯度、耗时和显存，不做 optimizer step。
 4. **D 单任务 pilot**：只在 A/B/C 通过后填写命令，少量训练与 rollout。
 5. **E 正式实验**：只在 D 通过并确定预算后填写命令。
 
-`acceptance_ledger.json` 记录每次尝试、成功/失败、耗时、GPU 和 artifacts。前置阶段未通过时后续阶段拒绝启动；重复运行已通过阶段不会覆盖证据。Stage C 只接受本地路径，不会偷偷下载模型。
+`acceptance_ledger.json` 记录每次尝试、成功/失败、耗时、GPU 和 artifacts。前置阶段未通过时后续阶段拒绝启动；重复运行已通过阶段不会覆盖证据。Stage C 的 Notebook 单元会在执行前明确显示并固定下载来源；已存在的权重与 batch 会校验后复用。
 
 ## 持久化与成本
 
