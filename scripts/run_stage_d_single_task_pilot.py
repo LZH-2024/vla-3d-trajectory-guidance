@@ -69,9 +69,16 @@ def main() -> int:
         args.config or project_root / "configs" / "gpu_acceptance_colab.json"
     ).resolve()
     config = json.loads(config_path.read_text(encoding="utf-8"))
-    env_python = Path(config["smolvla_python"]).resolve()
-    if Path(sys.executable).resolve() != env_python:
-        raise RuntimeError(f"wrong interpreter: got {sys.executable}, expected {env_python}")
+    # Keep the virtual-environment entry point for child processes.  Resolving
+    # this symlink produces uv's base CPython executable and drops .venv's
+    # site-packages (for example NumPy).  Only use resolved paths for identity
+    # validation of the current process.
+    env_python = Path(config["smolvla_python"]).expanduser()
+    expected_python = env_python.resolve()
+    if Path(sys.executable).resolve() != expected_python:
+        raise RuntimeError(
+            f"wrong interpreter: got {sys.executable}, expected {env_python}"
+        )
     output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     final_summary = output_dir / "summary.json"
