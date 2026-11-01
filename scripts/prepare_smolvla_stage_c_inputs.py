@@ -178,6 +178,23 @@ def _validate_reusable_batch(batch_dir: Path, stage_c: dict[str, Any]) -> bool:
     return True
 
 
+def _ensure_batched_action(
+    action: torch.Tensor,
+    *,
+    chunk_size: int,
+    action_dim: int,
+) -> torch.Tensor:
+    expected = (chunk_size, action_dim)
+    if tuple(action.shape) == expected:
+        return action.unsqueeze(0)
+    if tuple(action.shape) == (1, *expected):
+        return action
+    raise ValueError(
+        f"unexpected preprocessed action shape: {tuple(action.shape)}; "
+        f"expected {expected} or {(1, *expected)}"
+    )
+
+
 def main() -> int:
     args = parse_args()
     project_root = args.project_root.resolve()
@@ -268,6 +285,16 @@ def main() -> int:
             for key, value in processed.items()
             if isinstance(value, torch.Tensor)
         }
+        action = batch.get("action")
+        if action is None:
+            raise KeyError("SmolVLA preprocessor did not return the action tensor")
+        # The pinned processor adds a batch dimension to observations but
+        # intentionally leaves a temporal action chunk as (T, A).
+        batch["action"] = _ensure_batched_action(
+            action,
+            chunk_size=int(policy_config.chunk_size),
+            action_dim=int(policy_config.action_feature.shape[0]),
+        )
 
         trajectory = load_trajectory_record(
             trajectory_dir, allowed_sources={"prediction"}
