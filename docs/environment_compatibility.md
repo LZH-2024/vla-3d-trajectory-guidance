@@ -6,8 +6,11 @@
 
 - https://github.com/DAVIAN-Robotics/3D_HAMSTER
 - https://huggingface.co/DAVIAN-Robotics/3D_HAMSTER
-- https://github.com/huggingface/lerobot
-- https://github.com/huggingface/lerobot/blob/main/docs/source/smolvla.mdx
+- https://github.com/huggingface/lerobot/tree/3f797de5952432284a7c77ad2760218cb74e2f26
+- https://github.com/huggingface/lerobot/blob/3f797de5952432284a7c77ad2760218cb74e2f26/docs/source/libero.mdx
+- https://pypi.org/project/hf-libero/0.1.4/
+- https://github.com/ARISE-Initiative/robosuite/blob/v1.4.0/robosuite/utils/camera_utils.py
+- https://huggingface.co/datasets/lerobot/libero-assets/tree/0b3ea86be5fe169d0fd036ae63d1070ec09e90f6
 
 ## 审计对象
 
@@ -17,10 +20,14 @@
 | 3D HAMSTER | 97216a8493f46301bf569d398462b8bb21c458c5 |
 | 3D HAMSTER checkpoint | ddc5987a56cdcb14e5e2297817612532e46e912b |
 | LeRobot | 3f797de5952432284a7c77ad2760218cb74e2f26 |
+| hf-libero | 0.1.4；wheel SHA-256 207f76e2f28bff30f78132223d8592fe8f64b1f8fd90ce7024948ada0d7e2c27 |
+| robosuite | 1.4.0 |
+| MuJoCo | 3.8.1 |
+| LIBERO assets | 0b3ea86be5fe169d0fd036ae63d1070ec09e90f6 |
 
 参考 Notebook SHA-256：8ACF825F25B5ED0386E4B2BE5EF91E841D2506B2A81DF0FC4A9FFA3E6D9109BE。
 
-参考 Notebook 已保存的输出表明，它曾在 Colab T4 上用 Python 3.12.13、Torch 2.11.0+cu128 完成基础 CUDA 矩阵乘法。这个事实只说明附件中的参考栈曾运行成功，不等于本项目的新 Planner 环境已通过 GPU 验证。
+参考 Notebook 已保存的输出表明，它曾在 Colab T4 上用 Python 3.12.13、Torch 2.11.0+cu128 完成基础 CUDA 矩阵乘法。此后，用户已在 G4 RTX PRO 6000 Blackwell 服务器完整运行 01/02；本地检查保存输出确认环境、模型加载和官方六例通过。服务器生成的原始 outputs 尚未下载，因此本地还没有对应 JSON/CSV/overlay 文件副本。
 
 ## 约束对照
 
@@ -32,7 +39,7 @@
 | NumPy | 2.0.2 | >=1.24 | >=2.0,<2.3 | 两边满足 |
 | TorchCodec | 0.11.0+cu128 | 未要求 | dataset extra 为 >=0.3,<0.12（Linux x86_64） | 可保留，但 Planner 不依赖它 |
 | NVIDIA NPP | 12.4.1.87 | 未直接约束 | 未直接约束 | 作为参考 GPU 栈保留 |
-| Transformers | Planner 固定 4.57.6 | >=4.57,<4.58 | SmolVLA extra 间接要求 >=5.4,<5.6 | 冲突，无交集 |
+| Transformers | Planner 固定 4.57.6 | >=4.57,<4.58 | LeRobot LIBERO / SmolVLA extra 间接要求 >=5.4,<5.6；probe 固定 5.5.4 | 冲突，无交集 |
 | Hugging Face Hub | Planner 解析到 <1.0 | >=0.34,<1.0 | >=1.6,<2.0 | 冲突，无交集 |
 
 因此，Python/Torch 层面可以复用参考配置，但应用层依赖必须分环境。
@@ -60,9 +67,25 @@
 
 ### /content/.venv
 
-用途：后续 LeRobot / SmolVLA。
+当前用途：LIBERO 单帧 observation probe；后续才用于 LeRobot / SmolVLA。
 
-本阶段不安装。后续应在固定 LeRobot commit 后重新生成独立环境记录。不能复用 Planner 环境，也不能为了兼容 Planner 把 LeRobot 的 Transformers 强行降到 4.57。
+- Python 3.12.13；
+- 保留参考 Torch、Torchvision、TorchCodec、NumPy、NVIDIA NPP；
+- LeRobot 固定到审计 commit，项目版本 0.6.2；
+- Transformers 5.5.4，Hugging Face Hub 1.33.0；
+- hf-libero 0.1.4、robosuite 1.4.0、robomimic 0.2.0、MuJoCo 3.8.1；
+- 只安装 LeRobot `[libero]` extra，不启动 SmolVLA 训练；
+- 安装 editable checkout 时使用 uv `--no-sources`，避免 LeRobot 的开发期 `tool.uv.sources` 把参考 CUDA TorchCodec 静默改成 CPU wheel；实际依赖仍来自固定 commit 的标准项目 metadata；
+- `MUJOCO_GL=egl` 由运行命令显式传入；
+- 用独立精确版本脚本阻止核心版本漂移。
+
+不能复用 Planner 环境，也不能为了兼容 Planner 把 LeRobot 的 Transformers 强行降到 4.57。
+
+## LIBERO assets 固定
+
+hf-libero 0.1.4 的默认下载函数未传 `revision`，会读取 `lerobot/libero-assets` 的移动 HEAD。probe 在导入环境前显式下载并核对 revision `0b3ea86be5fe169d0fd036ae63d1070ec09e90f6`，然后把 hf-libero 的进程内 assets cache 指向该目录。这样场景资源不会因 Hub HEAD 后续变化而静默漂移。
+
+`hf-libero` wheel、包内 BDDL 和 init state 由版本与 wheel SHA-256 固定；每次 probe 还会记录本次任务 BDDL 与 init state 文件哈希。
 
 ## 可复现策略
 
@@ -72,16 +95,16 @@
 2. 3D HAMSTER Git commit；
 3. 3D HAMSTER checkpoint revision；
 4. Planner Transformers patch 版本；
-5. 用实际 Colab 解析结果生成版本记录。
+5. 用实际服务器解析结果生成 Planner 与 LIBERO 两份版本记录；
+6. 固定 hf-libero wheel 哈希与 LIBERO assets revision。
 
 上游 3D HAMSTER 只给出了部分范围依赖，没有官方完整 lockfile。本项目不会伪造一个未经 Colab 验证的全平台 lockfile。第一次成功运行后，应保留 outputs/environment/planner_environment.json，并可额外执行 uv pip freeze 形成该 Colab 镜像的冻结快照。
 
 ## 仍需运行时确认
 
-- Python 3.12.13 下所有 3D HAMSTER 间接依赖是否都有 Colab Linux wheel；
-- Torch 2.11.0+cu128 与模型自定义代码的真实加载；
-- A100 上 BF16 加载显存；
-- TorchCodec 与 NPP 的导入行为是否仍与参考 Notebook 一致；
-- 六组示例的推理结果是否复现。
+- `/content/.venv` 安装 LeRobot `[libero]` 后是否仍完整保留受保护核心版本；
+- 当前服务器驱动上的 MuJoCo EGL offscreen context；
+- 固定 assets snapshot 的真实下载与场景加载；
+- 双相机 RGB-D、米制深度和标定矩阵的运行时结果。
 
-这些只能在 Colab GPU 上确认，本地静态审计不能替代。
+这些需要在 Linux GPU 服务器 / Colab 上执行 03 Notebook；本地 CPU 静态测试不能替代。
