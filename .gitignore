@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+.venv_*/
+venv/
+env/
+
+# Notebook and editor state
+.ipynb_checkpoints/
+.vscode/
+.idea/
+*.swp
+
+# Secrets
+.env
+.env.*
+!.env.example
+.hf_token
+huggingface_token.txt
+
+# Downloaded upstream code, datasets, and model artifacts
+third_party/
+data/
+datasets/
+models/
+checkpoints/
+ckpt/
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.ckpt
+*.onnx
+
+# Experiment trackers and generated outputs
+wandb/
+mlruns/
+outputs/*
+!outputs/.gitkeep
+
+# OS files
+.DS_Store
+Thumbs.db
