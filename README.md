@@ -10,15 +10,15 @@
 |---|---|---|
 | 3D HAMSTER 官方六例 | **已在服务器真实运行通过** | 01/02 Notebook 保存输出；六例均有合法轨迹 |
 | LIBERO 单帧 RGB-D、K、外参、末端位姿 | **已在服务器真实运行通过** | 03 Notebook 保存输出 |
-| LIBERO 单帧 3D HAMSTER | **代码完成，待 GPU** | 04 尚未运行真实模型 |
+| LIBERO 单帧 3D HAMSTER | **已在服务器真实运行通过** | Stage B 保存 3 个 world XYZ 路点、几何诊断与 overlay |
 | Mock Planner 全链路 | **CPU 测试通过** | 固定 UVD，非真实模型结果 |
 | 统一轨迹缓存与因果读取 | **CPU 测试通过** | JSON/CSV/NPZ、SHA-256、Oracle 默认拒绝 |
 | SmolVLA E1/E2 条件模块 | **CPU 小模型测试通过** | 维度、前后向、梯度、缺失回退；非真实 SmolVLA |
-| 真实 SmolVLA E0/E1/E2 冒烟 | **入口已准备，待 GPU** | 需本地 policy 和预处理 batch，不自动下载 |
-| 小规模训练与闭环 rollout | **未运行** | 仅有配置、checkpoint/eval/recovery 框架 |
+| 真实 SmolVLA E0/E1/E2 冒烟 | **已在服务器真实运行通过** | Stage C 完成真实 forward/backward/inference 与 adapter 梯度检查 |
+| Stage D 单任务 optimizer/rollout | **代码已准备，待服务器 GPU** | 自动匹配真实 demonstration；每组仅 2 step + 1 rollout，不代表有效训练 |
 | 正式 E0/E1/E2 实验 | **未开始** | 正式预算故意保持未设置 |
 
-本地没有执行正式训练、闭环评估或真实 SmolVLA 前向，也没有据此编造任务成功率。
+本地没有执行本次新增 Stage D、正式训练或闭环评估，也没有据此编造任务成功率。Stage C 保存的 loss 只用于有限值检查，不能横向解释模型质量。
 
 ## 固定环境与上游
 
@@ -120,7 +120,7 @@ E2 第一版特征只有工作空间越界比例、相邻路点跳跃和当前 E
 
 ## 实验与恢复框架
 
-`configs/experiments/` 共享相同 suite、task、init state、seed、batch size、学习率、smoke/pilot 预算，只改变条件开关。当前 `dataset_repo_id`、本地 SmolVLA path 和正式训练步数保持空值，避免误启动。
+`configs/experiments/` 共享相同 suite、task、init state、seed、batch size、学习率、smoke/pilot 预算，只改变条件开关。LIBERO dataset 固定为 `lerobot/libero@a1aaacb7f6cd6ee5fb43120f673cebb0cfea7dd4`；本地 SmolVLA path 仍由 Stage C 证据自动解析，正式训练步数保持空值。
 
 已实现并经过 CPU 测试：
 
@@ -138,7 +138,7 @@ E2 第一版特征只有工作空间越界比例、相邻路点跳跃和当前 E
 
 它只固化 resolved config、digest、checkpoint/metrics/evaluation 路径，不会开始训练。`formal_steps` 当前为空，因此 formal plan 会主动拒绝生成。
 
-`scripts/run_closed_loop_evaluation.py` 接受显式 runner module；当前只提供统一恢复框架和 LIBERO 单任务 pilot plan，没有伪造一个未经 Stage C 验证的真实 simulator-policy runner。完整 LeRobot dataset/preprocessor 与 LIBERO runner 会在真实 Stage C 接口通过后再补，避免先写大量未经运行核实的训练胶水。
+Stage D 使用 `prepare_smolvla_stage_d_inputs.py` 将 Stage B 观测与候选 demonstration 起点按语言、EEF 和双 RGB 视角做阈值匹配。只有唯一匹配通过，才生成带真实 `50×7` action target 的 batch。`run_stage_d_single_task_pilot.py` 随后让 E0/E1/E2 分别从同一固定 checkpoint 开始，使用相同 batch 和逐步 RNG seed 做 2 次 optimizer update，再各运行一次 task0/init0 闭环。此入口是 GPU plumbing gate；单 chunk、2 step 和单 rollout 都不是论文实验。
 
 ## 集中 GPU 验收
 
@@ -147,7 +147,7 @@ E2 第一版特征只有工作空间越界比例、相邻路点跳跃和当前 E
 1. **A 环境与数据**：两个解释器、固定版本、CUDA、checkpoint revision、RGB-D 与标定。
 2. **B 高层可行性**：执行一次 04 真实推理，保存图、world XYZ、诊断、耗时和统一缓存；结果明显不可用则停止。
 3. **C SmolVLA 冒烟**：05 自动安装固定 `smolvla` extra、断点续传固定的 `lerobot/smolvla_libero` checkpoint，并由 B 的观测与 prediction 轨迹生成已预处理、因果检查的 smoke batch；随后检查 E0/E1/E2 真实 forward/backward、动作维度、梯度、耗时和显存，不做 optimizer step。
-4. **D 单任务 pilot**：只在 A/B/C 通过后填写命令，少量训练与 rollout。
+4. **D 单任务 pilot**：A/B/C 通过后自动准备真实匹配 batch，依次运行 E0/E1/E2 的 2-step optimizer smoke 与单次 rollout；无需填写路径。
 5. **E 正式实验**：只在 D 通过并确定预算后填写命令。
 
 `acceptance_ledger.json` 记录每次尝试、成功/失败、耗时、GPU 和 artifacts。前置阶段未通过时后续阶段拒绝启动；重复运行已通过阶段不会覆盖证据。Stage C 的 Notebook 单元会在执行前明确显示并固定下载来源；已存在的权重与 batch 会校验后复用。
@@ -162,6 +162,6 @@ E2 第一版特征只有工作空间越界比例、相邻路点跳跃和当前 E
 
     python -m unittest discover -s tests
 
-测试覆盖原有几何/LIBERO 校验，以及轨迹缓存、局部选择、条件张量、门控、梯度、action 对齐、Mock artifacts、batch 交换、配置切换、checkpoint/evaluation 恢复和 fail-stop ledger。
+测试覆盖原有几何/LIBERO 校验，以及轨迹缓存、局部选择、条件张量、门控、梯度、action 对齐、Mock artifacts、batch 交换、配置切换、checkpoint/evaluation 恢复和 fail-stop ledger。本次按用户要求未在本地重跑 CPU 测试；新增 Stage D 直接留给服务器 GPU 验收。
 
 下一步状态见 [项目进度](docs/project_status.md) 和 [任务清单](docs/next_steps.md)。

@@ -7,8 +7,9 @@
     "env_dir": "/content/.venv"
   },
   "data": {
-    "dataset_repo_id": null,
-    "dataset_root": "/content/libero_datasets",
+    "dataset_repo_id": "lerobot/libero",
+    "dataset_revision": "a1aaacb7f6cd6ee5fb43120f673cebb0cfea7dd4",
+    "dataset_root": "/content/libero_datasets/lerobot_libero_a1aaacb7",
     "suite": "libero_spatial",
     "task_ids": [
       0

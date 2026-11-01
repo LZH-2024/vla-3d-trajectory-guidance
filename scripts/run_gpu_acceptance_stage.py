@@ -309,22 +309,52 @@ def _stage_c(
 
 
 def _configured_command_stage(
-    stage: str, run_dir: Path, config: dict[str, Any], attempt: int
+    stage: str,
+    project_root: Path,
+    run_dir: Path,
+    config: dict[str, Any],
+    attempt: int,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
-    command = config[f"stage_{stage.lower()}"].get("command")
+    settings = config[f"stage_{stage.lower()}"]
+    command = settings.get("command")
     if not isinstance(command, list) or not command:
         raise ValueError(
             f"Stage {stage} command is intentionally unset; configure it only after prior stages pass"
         )
-    formatted = [str(item).format(run_dir=str(run_dir)) for item in command]
+    format_values = {
+        "project_root": str(project_root),
+        "run_dir": str(run_dir),
+        "attempt": attempt,
+    }
+    formatted = [str(item).format(**format_values) for item in command]
     log = (
         run_dir
         / f"stage_{stage.lower()}"
         / f"attempt_{attempt:03d}"
         / "command.log"
     )
-    _run(formatted, log)
-    return {"command_completed": True}, {"log": str(log)}
+    command_env = environment_with_venv_npp(Path(config["smolvla_python"]))
+    command_env.update(
+        {str(key): str(value) for key, value in settings.get("environment", {}).items()}
+    )
+    _run(formatted, log, env=command_env)
+
+    artifacts = {"log": str(log)}
+    metrics: dict[str, Any] = {"command_completed": True}
+    summary_template = settings.get("summary")
+    if summary_template:
+        summary_path = Path(str(summary_template).format(**format_values)).resolve()
+        if not summary_path.is_file():
+            raise FileNotFoundError(f"Stage {stage} summary is missing: {summary_path}")
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        if summary.get("valid") is not True:
+            raise RuntimeError(f"Stage {stage} summary is not valid")
+        artifacts["summary"] = str(summary_path)
+        metrics["summary_scope"] = summary.get("scope")
+        if stage == "D":
+            metrics["experiments"] = summary.get("experiments", [])
+            metrics["elapsed_seconds"] = summary.get("elapsed_seconds")
+    return metrics, artifacts
 
 
 def main() -> int:
@@ -366,7 +396,7 @@ def main() -> int:
             metrics, artifacts = _stage_c(project_root, run_dir, config, attempt)
         else:
             metrics, artifacts = _configured_command_stage(
-                args.stage, run_dir, config, attempt
+                args.stage, project_root, run_dir, config, attempt
             )
         ledger.pass_stage(args.stage, metrics=metrics, artifacts=artifacts)
         print(f"Stage {args.stage} passed. Later stages remain manual and fail-stop.")

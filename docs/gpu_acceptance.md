@@ -50,14 +50,22 @@ B 调用 `/content/.venv_planner/bin/python scripts/run_libero_planner_single_fr
 
 C 不做 optimizer step、checkpoint 更新或 rollout。smoke batch 中的零 action target 和缺失 gripper qpos 的零填充只用于真实模型接口/反向冒烟，metadata 明确禁止把它当成训练或评估数据。正式训练仍必须使用正确示范 action 和完整状态。
 
-## D / E
+## D：自动单任务 pilot
 
-D/E 的 command 和正式预算故意在配置中留空：
+Stage D 已配置，不需要手填 policy、dataset 或 batch 路径。执行 05 中的 D 单元后按以下顺序失败即停止：
 
-- D：C 通过后填写单任务、少 step、少初始状态的 pilot；
-- E：D 通过并确定预算后填写 E0/E1/E2 正式命令。
+1. 从 Stage B/C ledger 自动解析 prediction trajectory、原始 probe 和本地 SmolVLA checkpoint；
+2. 从固定 `lerobot/libero@a1aaacb7f6cd6ee5fb43120f673cebb0cfea7dd4` 中筛选同语言候选 episode；
+3. 用初始 EEF 与 agentview/wrist 解码图像差异选择唯一匹配，匹配不通过时不会加载模型训练；
+4. 生成带真实 demonstration `50×7` action target、prediction trajectory condition 和因果 metadata 的单 batch；
+5. E0/E1/E2 各自从同一 checkpoint 开始，用相同 batch 与逐 step RNG seed 完成 2 个 optimizer step；
+6. 每组运行一次 `libero_spatial` task0/init0 闭环并保存 action/EEF trace、稀疏截图、耗时和显存。
 
-不要在本轮离线开发中运行它们。
+Stage D 的通过含义只是三条真实数据、优化器和闭环管线均执行完成。任务成功与否会记录，但单次 rollout 不构成成功率；2 step/single chunk 也不构成有效训练。若进程在某组完成后中断，新的 acceptance attempt 会保留旧日志并从固定 base 重跑这个很短的 gate。
+
+## E：正式实验
+
+Stage E 仍保持 command 与正式预算为空。只有 D 的输出经过检查、真实训练数据覆盖范围确定后，才配置正式 E0/E1/E2 训练与多初始状态评估。
 
 ## 持久化
 

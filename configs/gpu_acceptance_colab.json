@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "status": "prepared_not_executed",
+  "status": "stage_abc_passed_stage_d_prepared_not_executed",
   "planner_python": "/content/.venv_planner/bin/python",
   "smolvla_python": "/content/.venv/bin/python",
   "stage_a": {
@@ -30,8 +30,48 @@
     "note": "05 prepares the pinned local policy and a causality-checked smoke batch after Stage B, then sets both paths automatically."
   },
   "stage_d": {
-    "command": null,
-    "note": "Fill only after Stage C passes; use a bounded single-task pilot command."
+    "command": [
+      "/content/.venv/bin/python",
+      "{project_root}/scripts/run_stage_d_single_task_pilot.py",
+      "--project-root",
+      "{project_root}",
+      "--config",
+      "{project_root}/configs/gpu_acceptance_colab.json",
+      "--run-dir",
+      "{run_dir}",
+      "--output-dir",
+      "{run_dir}/stage_d/attempt_{attempt:03d}/pilot"
+    ],
+    "summary": "{run_dir}/stage_d/attempt_{attempt:03d}/pilot/summary.json",
+    "environment": {
+      "MUJOCO_GL": "egl",
+      "MPLBACKEND": "Agg",
+      "LIBERO_CONFIG_PATH": "/content/.libero_vla_probe"
+    },
+    "device": "cuda:0",
+    "dataset_repo_id": "lerobot/libero",
+    "dataset_revision": "a1aaacb7f6cd6ee5fb43120f673cebb0cfea7dd4",
+    "dataset_root": "/content/libero_datasets/lerobot_libero_a1aaacb7",
+    "video_backend": "torchcodec",
+    "target_suite": "libero_spatial",
+    "target_task_id": 0,
+    "target_init_state_id": 0,
+    "candidate_episode_limit": 8,
+    "action_chunk_size": 50,
+    "action_dim": 7,
+    "num_waypoints": 8,
+    "optimizer_steps": 2,
+    "rollout_seed": 42,
+    "rollout_max_steps": 300,
+    "num_steps_wait": 10,
+    "snapshot_every_steps": 50,
+    "observation_match": {
+      "max_eef_distance_m": 0.04,
+      "max_agentview_mae": 0.2,
+      "max_wrist_mae": 0.2,
+      "min_score_margin": 0.02
+    },
+    "note": "Automatic bounded pilot: one matched real demonstration chunk, two optimizer steps, and one rollout for each of E0/E1/E2. This is plumbing evidence, not useful training or a success-rate estimate."
   },
   "stage_e": {
     "command": null,

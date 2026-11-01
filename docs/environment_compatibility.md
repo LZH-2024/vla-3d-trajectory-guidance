@@ -11,6 +11,7 @@
 - https://pypi.org/project/hf-libero/0.1.4/
 - https://github.com/ARISE-Initiative/robosuite/blob/v1.4.0/robosuite/utils/camera_utils.py
 - https://huggingface.co/datasets/lerobot/libero-assets/tree/0b3ea86be5fe169d0fd036ae63d1070ec09e90f6
+- https://huggingface.co/datasets/lerobot/libero/tree/a1aaacb7f6cd6ee5fb43120f673cebb0cfea7dd4
 
 ## 审计对象
 
@@ -24,6 +25,7 @@
 | robosuite | 1.4.0 |
 | MuJoCo | 3.8.1 |
 | LIBERO assets | 0b3ea86be5fe169d0fd036ae63d1070ec09e90f6 |
+| LIBERO demonstration dataset | lerobot/libero@a1aaacb7f6cd6ee5fb43120f673cebb0cfea7dd4 |
 
 参考 Notebook SHA-256：8ACF825F25B5ED0386E4B2BE5EF91E841D2506B2A81DF0FC4A9FFA3E6D9109BE。
 
@@ -67,7 +69,7 @@
 
 ### /content/.venv
 
-当前用途：LIBERO observation、固定 LeRobot 与后续 SmolVLA Stage C 冒烟。
+当前用途：LIBERO observation、固定 LeRobot、SmolVLA Stage C 及后续 Stage D。
 
 - Python 3.12.13；
 - 保留参考 Torch、Torchvision、TorchCodec、NumPy、NVIDIA NPP；
@@ -98,7 +100,8 @@ hf-libero 0.1.4 的默认下载函数未传 `revision`，会读取 `lerobot/libe
 3. 3D HAMSTER checkpoint revision；
 4. Planner Transformers patch 版本；
 5. 用实际服务器解析结果生成 Planner 与 LIBERO 两份版本记录；
-6. 固定 hf-libero wheel 哈希与 LIBERO assets revision。
+6. 固定 hf-libero wheel 哈希与 LIBERO assets revision；
+7. 固定 `lerobot/libero` demonstration dataset revision。
 
 上游 3D HAMSTER 只给出了部分范围依赖，没有官方完整 lockfile。本项目不会伪造一个未经 Colab 验证的全平台 lockfile。第一次成功运行后，应保留 outputs/environment/planner_environment.json，并可额外执行 uv pip freeze 形成该 Colab 镜像的冻结快照。
 
@@ -106,10 +109,4 @@ hf-libero 0.1.4 的默认下载函数未传 `revision`，会读取 `lerobot/libe
 
 03 的服务器保存输出已经确认 `/content/.venv` 受保护版本、固定 LeRobot checkout、MuJoCo EGL、固定 assets、双相机 RGB-D、米制 depth 与标定。原始 outputs 尚未下载，本地证据仍以 Notebook 保存输出为准。
 
-仍需在下一次 GPU 会话确认：
-
-- 04 的真实单帧 3D HAMSTER 输出与几何可用性；
-- 本地 SmolVLA policy 与固定 commit 的真实加载；
-- E0/E1/E2 在真实 `SmolVLAPolicy` 上的 forward/backward、梯度、动作维度与显存。
-
-这些由 05 Notebook 的 Stage A/B/C 分别执行；本地 CPU Mock 不能替代。
+04 / Stage B 与真实 SmolVLA Stage C 已在服务器通过。下一项待服务器确认的是固定 demonstration revision 的 episode 匹配、真实 action preprocessing、2-step optimizer smoke 和单次 LIBERO rollout；这些由 05 Notebook 的 Stage D 执行。本次按用户要求不在本地运行 CPU 测试。
