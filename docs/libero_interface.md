@@ -1,6 +1,6 @@
 # LIBERO 接口预留
 
-当前阶段已经实现单帧 observation probe，但仍不调用 Planner、不修改 SmolVLA。
+单帧 observation probe 已在服务器通过。当前增加只读文件桥接来调用 Planner，仍不运行 policy、不发送 action，也不修改 SmolVLA。
 
 ## 数据流
 
@@ -54,4 +54,13 @@
 - 稀疏 camera/world 点云样本；
 - 末端 world position、`xyzw` quaternion 与 `T_world_eef`。
 
-下一步只在 03 Notebook 通过后，用同一帧数据做 Planner 单帧调用与几何检查。
+`src/trajectory_guidance/libero_planner.py` 与 `scripts/run_libero_planner_single_frame.py` 现已实现同一帧的 Planner 调用准备与几何检查：
+
+- 自动选择最新的有效 probe；
+- 复核 manifest、坐标约定、输入文件 SHA-256、depth、K 与 `T_world_camera`；
+- 由 `/content/.venv_planner` 读取 `/content/.venv` 生成的文件，不混装依赖；
+- 保存原始 UVD、camera XYZ、LIBERO world XYZ 和 2D overlay；
+- 用 XYZ 重投影回 UVD，检查数值闭环和刚体段长不变性；
+- 记录路点与场景表面 depth 差值，但不把场景 depth 覆盖到 Planner 路点上。
+
+04 的通过只能说明单帧输出在当前标定下可转换且数值自洽，不能证明低层控制可执行或 LIBERO 任务成功。

@@ -18,6 +18,11 @@ class ConfigurationTests(unittest.TestCase):
         cls.constraints = (PROJECT_ROOT / "configs" / "libero_constraints.txt").read_text(
             encoding="utf-8"
         )
+        cls.bridge = json.loads(
+            (PROJECT_ROOT / "configs" / "libero_planner_single_frame.json").read_text(
+                encoding="utf-8"
+            )
+        )
 
     def test_planner_and_libero_environments_are_isolated(self) -> None:
         self.assertNotEqual(
@@ -42,6 +47,21 @@ class ConfigurationTests(unittest.TestCase):
         for package, version in expected.items():
             with self.subTest(package=package):
                 self.assertIn(f"{package}=={version}", self.constraints)
+
+    def test_single_frame_bridge_reuses_isolated_configs(self) -> None:
+        self.assertEqual(self.bridge["planner_config"], "configs/planner_colab.json")
+        self.assertEqual(self.bridge["probe_config"], "configs/libero_probe_colab.json")
+        self.assertEqual(self.bridge["single_frame"]["camera_name"], "agentview")
+        self.assertEqual(self.bridge["single_frame"]["device"], "cuda:0")
+        self.assertTrue(self.bridge["single_frame"]["offline"])
+        self.assertEqual(
+            self.bridge["single_frame"]["probe_output_root"],
+            self.libero["probe"]["output_root"],
+        )
+        self.assertEqual(
+            self.bridge["single_frame"]["accepted_depth_range_m"],
+            self.libero["probe"]["accepted_depth_range_m"],
+        )
 
 
 if __name__ == "__main__":

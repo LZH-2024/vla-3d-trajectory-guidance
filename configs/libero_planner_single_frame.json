@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "audited_on": "2026-11-01",
+  "planner_config": "configs/planner_colab.json",
+  "probe_config": "configs/libero_probe_colab.json",
+  "single_frame": {
+    "camera_name": "agentview",
+    "probe_output_root": "/content/vla-3d-trajectory-guidance/outputs/libero_observation_probe",
+    "output_root": "/content/vla-3d-trajectory-guidance/outputs/libero_planner_single_frame",
+    "offline": true,
+    "device": "cuda:0",
+    "max_new_tokens": 1024,
+    "accepted_depth_range_m": [
+      0.01,
+      10.0
+    ],
+    "max_projection_roundtrip_error": 1e-06
+  }
+}

@@ -1,13 +1,13 @@
 # VLA 3D Trajectory Guidance
 
-本项目用于机器人学习课程大作业。第一阶段的 **3D HAMSTER 官方高层规划器六例推理**已经通过服务器运行；当前进入第二阶段，只做 **LIBERO 单帧 RGB-D observation probe**，为后续单帧 Planner 可行性验证准备可靠的深度与坐标基础。
+本项目用于机器人学习课程大作业。第一阶段的 **3D HAMSTER 官方高层规划器六例推理**和第二阶段的 **LIBERO 单帧 RGB-D observation probe**均已通过服务器运行；当前只推进第三阶段：用已保存的同一帧 LIBERO 数据做 **3D HAMSTER 单帧几何可行性验证**。
 
 当前阶段只做：
 
-- 在独立 `/content/.venv` 中固定 LeRobot / hf-libero probe 环境；
-- 从 LIBERO 导出一帧双相机 RGB、原始 depth buffer 与米制 depth；
-- 保存匹配分辨率的相机内参、双向外参、末端位姿和点云抽样；
-- 明确所有单位、图像方向、坐标系与矩阵方向。
+- 复用 03 Notebook 已保存的 `agentview` RGB、米制 depth、任务指令与标定；
+- 在独立 `/content/.venv_planner` 中调用固定 revision 的 3D HAMSTER；
+- 保存原始预测、UVD、camera XYZ、LIBERO world XYZ、overlay、耗时和显存；
+- 检查非空/有限/范围、UVD 投影闭环与刚体变换一致性。
 
 本阶段不训练模型，不修改 SmolVLA，不实现轨迹融合，也不编写完整论文。
 
@@ -17,7 +17,9 @@
 
 - 用户已在 G4 RTX PRO 6000 Blackwell 服务器运行 01/02 Notebook；保存的 Notebook 输出显示受保护版本、CUDA、checkpoint 和六组官方样例全部通过；
 - 六例共得到 24 个合法路点，平均推理约 2.823 秒；模型加载时显存分配约 17.03 GiB；
-- 服务器 `outputs/` 尚未下载到本地，因此当前本地证据是 Notebook 保存输出，原始 JSON/CSV/overlay 仍需后续归档；
+- 03 Notebook 保存输出显示 LIBERO probe 已通过：双相机 RGB-D、米制 depth、K、外参、末端位姿和点云抽样均有效；
+- `agentview` 为 256×256，米制 depth 范围约 0.676–3.069 m，K 与图像分辨率匹配，`T_world_camera` 为合法刚体变换；
+- 服务器 `outputs/` 尚未下载到本地，因此当前本地证据是 Notebook 保存输出，原始 JSON/NPY/CSV/overlay 仍留在服务器；
 - 3D HAMSTER 与当前 LeRobot 的官方依赖存在明确冲突，不能放进同一个虚拟环境。
 
 | 环境 | 用途 | 关键上游要求 |
@@ -53,7 +55,8 @@
     │   ├── setup_env_reference.ipynb   # 用户提供的环境基准，保持不改
     │   ├── 01_planner_setup.ipynb      # Planner 环境、下载、导入与模型加载检查
     │   ├── 02_planner_inference.ipynb  # 官方六例推理与结果展示
-    │   └── 03_libero_observation_probe.ipynb # 单帧 RGB-D 与标定探测
+    │   ├── 03_libero_observation_probe.ipynb # 单帧 RGB-D 与标定探测
+    │   └── 04_libero_planner_single_frame.ipynb # 单帧 Planner 与坐标检查
     ├── scripts/                         # 可重复执行的环境与推理入口
     ├── src/trajectory_guidance/         # 校验、坐标转换、可视化和接口契约
     ├── tests/                           # 不依赖 GPU 的基础测试
@@ -70,8 +73,9 @@ Planner 复现已经完成。若从全新运行时复现，依次执行：
 1. **notebooks/01_planner_setup.ipynb**
 2. **notebooks/02_planner_inference.ipynb**
 3. **notebooks/03_libero_observation_probe.ipynb**
+4. **notebooks/04_libero_planner_single_frame.ipynb**
 
-Notebook 默认内核不会切换到虚拟环境。所有安装、导入检查、模型加载和推理都由以下解释器显式执行：
+Notebook 默认内核不会切换到虚拟环境。所有 Planner 安装、导入检查、模型加载和推理都由以下解释器显式执行：
 
     /content/.venv_planner/bin/python
 
@@ -109,6 +113,14 @@ Notebook 默认内核不会切换到虚拟环境。所有安装、导入检查�
 
 首次下载 assets 需要网络；公开资源不要求训练，也不下载 LIBERO demonstration dataset。
 
+03 的 LIBERO 命令则显式使用 `/content/.venv/bin/python`。
+
+04 Notebook 不安装或下载任何内容，并设置 Hugging Face / Transformers offline 模式，只复用现有 checkpoint 和 probe。它自动选择服务器上最新的有效 probe，先用 Planner 解释器复核受保护版本、CUDA、上游 commit 和 checkpoint revision，再运行一次 `agentview` 推理。输出目录为：
+
+    outputs/libero_planner_single_frame/<probe>_agentview_<timestamp>/
+
+其中包含 `raw_prediction.json`、`raw_output.txt`、三份 UVD/camera/world CSV、`trajectory_overlay.png` 和 `run_summary.json`。world XYZ 仍属于 LIBERO MuJoCo world，只用于离线几何判断，不等同于机器人基座动作。
+
 ## 坐标与深度约定
 
 3D HAMSTER 的输出是 **[u, v, depth]**，不是直接的世界坐标 XYZ：
@@ -118,7 +130,7 @@ Notebook 默认内核不会切换到虚拟环境。所有安装、导入检查�
 - 输入 RGB 与 depth 必须像素对齐；
 - 官方预处理把最长边缩放到 640；
 - 只有结合匹配分辨率的相机内参，才能反投影到相机坐标系；
-- 外参方向和目标坐标系未核实前，不转换到 LIBERO 世界或机器人基座坐标系。
+- 03 已记录并验证 `T_world_camera`，因此 04 可转换到 LIBERO MuJoCo world；尚未定义 world-to-base 时，不能把结果称为机器人基座坐标或直接动作。
 
 LIBERO probe 的约定是：
 
@@ -137,7 +149,7 @@ LIBERO probe 的约定是：
 
     python -m unittest discover -s tests
 
-它验证路点、深度、UVD 反投影，以及 LIBERO depth buffer、标定矩阵、点云反投影和刚体变换。
+当前 21 个测试验证路点、深度、UVD 双向投影，以及 LIBERO depth buffer、标定矩阵、点云反投影、刚体变换、probe 选择和跨环境文件桥接。
 
 ## 已实现与待验证
 
@@ -150,6 +162,9 @@ LIBERO probe 的约定是：
 - 相机坐标反投影与 LIBERO 设计接口；
 - 独立 LIBERO 环境 bootstrap、精确版本检查与固定 assets revision；
 - 单帧双相机 RGB-D、标定、末端位姿和点云抽样导出；
+- 最新有效 probe 选择、输入哈希复核与固定 checkpoint provenance 检查；
+- 单帧 UVD 到 camera/world XYZ、投影闭环、刚体长度一致性和诊断指标保存；
+- 04 Notebook 的无下载执行流程与验收门；
 - CPU 可执行的单元测试。
 
 已由服务器保存输出确认：
@@ -157,14 +172,14 @@ LIBERO probe 的约定是：
 - Planner 依赖解析、CUDA 冒烟和 9B BF16 checkpoint 加载；
 - 六组官方样例都有非空合法轨迹，保存的 overlay 目视合理；
 - 实际模型加载、推理耗时和显存记录。
+- LIBERO 单帧 probe 的 EGL 渲染、双相机 RGB/depth 对齐与完整 manifest 验收。
 
 仍需用户在 GPU 服务器执行确认：
 
-- 03 Notebook 的 EGL 环境创建与固定 assets 下载；
-- 双相机 RGB/depth 像素对齐、图像方向和 depth preview 的目视质量；
-- 米制 depth、K、外参、末端位姿和点云抽样全部通过 manifest 验收；
-- 把服务器端 probe 输出下载归档。
+- 运行 04 Notebook，确认 LIBERO 指令能产生非空合法 UVD；
+- 目视检查 overlay，并结合 camera/world XYZ、末端距离和场景 depth 差值判断几何是否合理；
+- 将服务器端 03/04 原始输出在方便时统一下载归档；本阶段不要求先下载再继续。
 
-本地只运行了 CPU 单元测试，没有伪称本地已完成 LIBERO EGL 验证。
+本地只运行了 CPU 单元测试，没有伪称本地已完成 04 的真实 GPU 推理。
 
 下一阶段见 [任务清单](docs/next_steps.md)。
