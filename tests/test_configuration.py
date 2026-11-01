@@ -23,6 +23,11 @@ class ConfigurationTests(unittest.TestCase):
                 encoding="utf-8"
             )
         )
+        cls.gpu_acceptance = json.loads(
+            (PROJECT_ROOT / "configs" / "gpu_acceptance_colab.json").read_text(
+                encoding="utf-8"
+            )
+        )
 
     def test_planner_and_libero_environments_are_isolated(self) -> None:
         self.assertNotEqual(
@@ -62,6 +67,20 @@ class ConfigurationTests(unittest.TestCase):
             self.bridge["single_frame"]["accepted_depth_range_m"],
             self.libero["probe"]["accepted_depth_range_m"],
         )
+
+    def test_gpu_acceptance_is_isolated_and_formal_stages_are_opt_in(self) -> None:
+        self.assertEqual(
+            self.gpu_acceptance["planner_python"],
+            "/content/.venv_planner/bin/python",
+        )
+        self.assertEqual(
+            self.gpu_acceptance["smolvla_python"],
+            "/content/.venv/bin/python",
+        )
+        self.assertIsNone(self.gpu_acceptance["stage_c"]["policy_path"])
+        self.assertIsNone(self.gpu_acceptance["stage_d"]["command"])
+        self.assertIsNone(self.gpu_acceptance["stage_e"]["command"])
+        self.assertFalse(self.gpu_acceptance["persistence"]["enabled"])
 
 
 if __name__ == "__main__":

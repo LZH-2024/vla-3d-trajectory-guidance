@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "status": "prepared_not_executed",
+  "planner_python": "/content/.venv_planner/bin/python",
+  "smolvla_python": "/content/.venv/bin/python",
+  "stage_a": {
+    "planner_config": "configs/planner_colab.json",
+    "libero_config": "configs/libero_probe_colab.json",
+    "planner_checkpoint_manifest": "outputs/environment/planner_checkpoint_manifest.json",
+    "planner_checkpoint_dir": "/content/models/3D_HAMSTER",
+    "probe_output_root": "/content/vla-3d-trajectory-guidance/outputs/libero_observation_probe",
+    "probe_dir": null,
+    "camera_name": "agentview"
+  },
+  "stage_b": {
+    "single_frame_config": "configs/libero_planner_single_frame.json"
+  },
+  "stage_c": {
+    "policy_path": null,
+    "batch_artifact": null,
+    "device": "cuda:0",
+    "note": "Set local paths or VLA_SMOLVLA_POLICY_PATH and VLA_SMOLVLA_BATCH_ARTIFACT. No download is attempted."
+  },
+  "stage_d": {
+    "command": null,
+    "note": "Fill only after Stage C passes; use a bounded single-task pilot command."
+  },
+  "stage_e": {
+    "command": null,
+    "note": "Fill only after Stage D passes; formal budgets are intentionally unset."
+  },
+  "persistence": {
+    "enabled": false,
+    "root": null,
+    "note": "When long training begins, point the run directory or VLA_PERSISTENT_ROOT to mounted Google Drive."
+  }
+}

@@ -1,185 +1,167 @@
 # VLA 3D Trajectory Guidance
 
-本项目用于机器人学习课程大作业。第一阶段的 **3D HAMSTER 官方高层规划器六例推理**和第二阶段的 **LIBERO 单帧 RGB-D observation probe**均已通过服务器运行；当前只推进第三阶段：用已保存的同一帧 LIBERO 数据做 **3D HAMSTER 单帧几何可行性验证**。
+本项目研究 **3D HAMSTER 高层三维轨迹 + SmolVLA 低层动作专家 + 轻量轨迹条件**。当前目标不是直接开始大规模训练，而是先把数据、几何、条件接口和分阶段验收做稳，减少付费 GPU 被路径、格式或维度错误浪费的风险。
 
-当前阶段只做：
-
-- 复用 03 Notebook 已保存的 `agentview` RGB、米制 depth、任务指令与标定；
-- 在独立 `/content/.venv_planner` 中调用固定 revision 的 3D HAMSTER；
-- 保存原始预测、UVD、camera XYZ、LIBERO world XYZ、overlay、耗时和显存；
-- 检查非空/有限/范围、UVD 投影闭环与刚体变换一致性。
-
-本阶段不训练模型，不修改 SmolVLA，不实现轨迹融合，也不编写完整论文。
-
-## 当前结论
+## 当前状态
 
 截至 2026-11-01：
 
-- 用户已在 G4 RTX PRO 6000 Blackwell 服务器运行 01/02 Notebook；保存的 Notebook 输出显示受保护版本、CUDA、checkpoint 和六组官方样例全部通过；
-- 六例共得到 24 个合法路点，平均推理约 2.823 秒；模型加载时显存分配约 17.03 GiB；
-- 03 Notebook 保存输出显示 LIBERO probe 已通过：双相机 RGB-D、米制 depth、K、外参、末端位姿和点云抽样均有效；
-- `agentview` 为 256×256，米制 depth 范围约 0.676–3.069 m，K 与图像分辨率匹配，`T_world_camera` 为合法刚体变换；
-- 服务器 `outputs/` 尚未下载到本地，因此当前本地证据是 Notebook 保存输出，原始 JSON/NPY/CSV/overlay 仍留在服务器；
-- 3D HAMSTER 与当前 LeRobot 的官方依赖存在明确冲突，不能放进同一个虚拟环境。
-
-| 环境 | 用途 | 关键上游要求 |
+| 项目 | 状态 | 证据边界 |
 |---|---|---|
-| **/content/.venv_planner** | 3D HAMSTER 推理 | Transformers >=4.57,<4.58；Hugging Face Hub <1.0 |
-| **/content/.venv** | LIBERO probe；后续 LeRobot / SmolVLA | 当前 LeRobot 要求 Transformers >=5.4,<5.6；Hugging Face Hub >=1.6,<2.0 |
+| 3D HAMSTER 官方六例 | **已在服务器真实运行通过** | 01/02 Notebook 保存输出；六例均有合法轨迹 |
+| LIBERO 单帧 RGB-D、K、外参、末端位姿 | **已在服务器真实运行通过** | 03 Notebook 保存输出 |
+| LIBERO 单帧 3D HAMSTER | **代码完成，待 GPU** | 04 尚未运行真实模型 |
+| Mock Planner 全链路 | **CPU 测试通过** | 固定 UVD，非真实模型结果 |
+| 统一轨迹缓存与因果读取 | **CPU 测试通过** | JSON/CSV/NPZ、SHA-256、Oracle 默认拒绝 |
+| SmolVLA E1/E2 条件模块 | **CPU 小模型测试通过** | 维度、前后向、梯度、缺失回退；非真实 SmolVLA |
+| 真实 SmolVLA E0/E1/E2 冒烟 | **入口已准备，待 GPU** | 需本地 policy 和预处理 batch，不自动下载 |
+| 小规模训练与闭环 rollout | **未运行** | 仅有配置、checkpoint/eval/recovery 框架 |
+| 正式 E0/E1/E2 实验 | **未开始** | 正式预算故意保持未设置 |
 
-两者都能在约束层面使用 Python 3.12.13、Torch 2.11.0+cu128、Torchvision 0.26.0+cu128 和 NumPy 2.0.2，但 Transformers 与 Hub 版本没有交集。详见 [环境兼容性说明](docs/environment_compatibility.md)。
+本地没有执行正式训练、闭环评估或真实 SmolVLA 前向，也没有据此编造任务成功率。
 
-本项目固定：
+## 固定环境与上游
 
-- 3D HAMSTER Git commit：**97216a8493f46301bf569d398462b8bb21c458c5**
-- 3D HAMSTER checkpoint revision：**ddc5987a56cdcb14e5e2297817612532e46e912b**
-- LeRobot 审计 commit：**3f797de5952432284a7c77ad2760218cb74e2f26**
-- Planner Transformers：**4.57.6**，位于官方允许范围内
-- LIBERO probe Transformers：**5.5.4**
-- hf-libero：**0.1.4**，robosuite：**1.4.0**，MuJoCo：**3.8.1**
-- LIBERO assets revision：**0b3ea86be5fe169d0fd036ae63d1070ec09e90f6**
+两个环境必须隔离：
 
-官方依据：
+| 环境 | 用途 | 关键依赖 |
+|---|---|---|
+| `/content/.venv_planner` | 3D HAMSTER 推理 | Transformers 4.57.6；Hub `<1.0` |
+| `/content/.venv` | LIBERO、LeRobot、SmolVLA | Transformers 5.5.4；Hub 1.33.0 |
 
-- [3D HAMSTER 仓库](https://github.com/DAVIAN-Robotics/3D_HAMSTER)
-- [3D HAMSTER 模型](https://huggingface.co/DAVIAN-Robotics/3D_HAMSTER)
-- [LeRobot 仓库](https://github.com/huggingface/lerobot)
-- [SmolVLA 官方说明](https://github.com/huggingface/lerobot/blob/main/docs/source/smolvla.mdx)
+共同受保护基础为 Python 3.12.13、Torch 2.11.0+cu128、Torchvision 0.26.0+cu128、TorchCodec 0.11.0+cu128、NumPy 2.0.2、NVIDIA NPP 12.4.1.87。不得为安装成功而静默改变这些版本。
 
-## 目录
+固定点：
+
+- 3D HAMSTER commit：`97216a8493f46301bf569d398462b8bb21c458c5`
+- 3D HAMSTER checkpoint revision：`ddc5987a56cdcb14e5e2297817612532e46e912b`
+- LeRobot 审计 commit：`3f797de5952432284a7c77ad2760218cb74e2f26`
+- LIBERO assets revision：`0b3ea86be5fe169d0fd036ae63d1070ec09e90f6`
+
+依赖冲突与版本依据见 [环境兼容性说明](docs/environment_compatibility.md)。上游参考：[3D HAMSTER](https://github.com/DAVIAN-Robotics/3D_HAMSTER)、[固定 LeRobot SmolVLA 源码](https://github.com/huggingface/lerobot/blob/3f797de5952432284a7c77ad2760218cb74e2f26/src/lerobot/policies/smolvla/modeling_smolvla.py)、[3DWay](https://github.com/ziqin-h/3DWay)。
+
+## 项目结构
 
     .
-    ├── configs/                         # Colab 路径、上游 commit 和关键版本约束
-    ├── docs/                            # 兼容性、接口设计和下一阶段清单
+    ├── configs/
+    │   ├── experiments/                 # E0/E1/E2 的共享预算与条件开关
+    │   └── gpu_acceptance_colab.json    # A→E 验收配置，D/E 默认未设置
+    ├── docs/                            # 环境、数据格式、SmolVLA 与验收说明
     ├── notebooks/
-    │   ├── setup_env_reference.ipynb   # 用户提供的环境基准，保持不改
-    │   ├── 01_planner_setup.ipynb      # Planner 环境、下载、导入与模型加载检查
-    │   ├── 02_planner_inference.ipynb  # 官方六例推理与结果展示
-    │   ├── 03_libero_observation_probe.ipynb # 单帧 RGB-D 与标定探测
-    │   └── 04_libero_planner_single_frame.ipynb # 单帧 Planner 与坐标检查
-    ├── scripts/                         # 可重复执行的环境与推理入口
-    ├── src/trajectory_guidance/         # 校验、坐标转换、可视化和接口契约
-    ├── tests/                           # 不依赖 GPU 的基础测试
-    └── outputs/                         # 生成结果；Git 默认忽略
+    │   ├── setup_env_reference.ipynb    # 用户环境基准，不修改
+    │   ├── 01_planner_setup.ipynb       # 已有真实服务器输出
+    │   ├── 02_planner_inference.ipynb   # 已有真实服务器输出
+    │   ├── 03_libero_observation_probe.ipynb # 已有真实服务器输出
+    │   ├── 04_libero_planner_single_frame.ipynb
+    │   └── 05_gpu_acceptance.ipynb
+    ├── scripts/                         # Mock、检查、真实冒烟与分阶段入口
+    ├── src/trajectory_guidance/         # 几何、缓存、条件、数据与恢复逻辑
+    ├── tests/                           # CPU/Mock 单元测试
+    └── outputs/                         # 生成结果，Git 忽略
 
-## 服务器 / Colab 使用顺序
+## 离线开发入口
 
-先在 Colab 中把本仓库放到：
+下面两条命令不下载模型、不需要 GPU：
 
-    /content/vla-3d-trajectory-guidance
+    python scripts/run_mock_planner_validation.py
+    python scripts/run_cpu_mock_experiments.py
 
-Planner 复现已经完成。若从全新运行时复现，依次执行：
+第一条构造可控 RGB-D、K、`T_world_camera` 和固定 UVD，复用真实几何代码完成：
 
-1. **notebooks/01_planner_setup.ipynb**
-2. **notebooks/02_planner_inference.ipynb**
-3. **notebooks/03_libero_observation_probe.ipynb**
-4. **notebooks/04_libero_planner_single_frame.ipynb**
+- UVD → camera XYZ → LIBERO world XYZ；
+- JSON、CSV、NPZ、overlay 与统一缓存保存；
+- 合法、空轨迹、U/V 越界、无效 depth 处理。
 
-Notebook 默认内核不会切换到虚拟环境。所有 Planner 安装、导入检查、模型加载和推理都由以下解释器显式执行：
+所有文件都标记 `mock=true`，写入 `outputs/mock_planner/`，不会混入真实预测。
 
-    /content/.venv_planner/bin/python
+第二条使用小型 Action Expert 形状替身测试 E0/E1/E2：
 
-01 Notebook 会：
+- 训练和推理走同一个条件 wrapper；
+- 固定局部路点、valid mask、无轨迹精确零回退；
+- 新增参数前向、反向与有限梯度；
+- checkpoint 保存、恢复和动作输出维度。
 
-1. 检查 GPU、驱动、显存与磁盘；
-2. 安装 uv 0.13.6；
-3. 创建并核对 Python 3.12.13 的 Planner 环境；
-4. 安装并保护参考 GPU 栈；
-5. 拉取固定 commit 的 3D HAMSTER；
-6. 安装官方推理依赖；
-7. 下载固定 revision 的公开 checkpoint；
-8. 执行精确版本、CUDA 冒烟和可选模型加载检查；
-9. 在 outputs/environment/ 写出版本记录。
+它只验证计算和接口，不等于真实 SmolVLA 训练。
 
-02 Notebook 会一次加载模型并运行官方 sample_0 到 sample_5。每个样例保存：
+## 统一三维轨迹格式
 
-- raw_prediction.json：原始模型文本、解析路点、校验结果、耗时和显存；
-- raw_output.txt：模型原始文本；
-- waypoints_uvd.csv：归一化图像坐标与米制深度；
-- waypoints_camera_xyz.csv：有相机内参时生成的相机坐标系 XYZ；
-- trajectory_overlay.png：二维轨迹叠加图；
-- run_summary.json：六例汇总及是否全部通过。
+每条记录是一个可跨虚拟环境交换的目录：
 
-03 Notebook 不调用 Planner，而是显式使用：
+    <trajectory_id>/
+    ├── metadata.json
+    ├── trajectory.npz
+    ├── waypoints.csv
+    └── manifest.json
 
-    /content/.venv/bin/python
+记录包含 episode/task/init state/observation、模型版本与代码 revision、输入 RGB SHA-256、语言指令、米制 XYZ、frame、顺序、valid mask、gripper event、K、`T_world_camera`、来源和可用时刻。加载时会验证所有文件 SHA-256、数组形状、顺序和 schema。
 
-它会安装固定 LeRobot commit 的 `[libero]` extra，下载固定 revision 的 LIBERO assets，并保存：
+正常条件读取遵守：
 
-- `observation_manifest.json`：任务、版本、坐标约定、验证结果与耗时；
-- `observation_arrays.npz`：双相机 RGB、depth buffer、米制 depth、K、外参与末端位姿；
-- `*_rgb.png`、`*_depth_buffer.npy`、`*_depth_m.npy`；
-- `*_calibration.json`、`*_pointcloud_sample.npz` 和 depth preview。
+    record.available_at_observation_index <= 当前 observation_index
 
-首次下载 assets 需要网络；公开资源不要求训练，也不下载 LIBERO demonstration dataset。
+包含专家未来轨迹的数据必须标为 Oracle / `uses_future_expert_information=true`，正常 loader 与 provider 默认拒绝。详见 [轨迹数据契约](docs/trajectory_data_contract.md)。
 
-03 的 LIBERO 命令则显式使用 `/content/.venv/bin/python`。
+## SmolVLA 条件接口
 
-04 Notebook 不安装或下载任何内容，并设置 Hugging Face / Transformers offline 模式，只复用现有 checkpoint 和 probe。它自动选择服务器上最新的有效 probe，先用 Planner 解释器复核受保护版本、CUDA、上游 commit 和 checkpoint revision，再运行一次 `agentview` 推理。输出目录为：
+在固定 LeRobot commit 中，SmolVLA 的 noisy action 与 timestep 在 Action Expert suffix 中经过 `action_time_mlp_out`，随后保留原 Flow Matching 目标和 MSE 损失。本项目不改第三方源码，而是包装已加载 policy，在该层输出处增加一个固定维度条件向量：
 
-    outputs/libero_planner_single_frame/<probe>_agentview_<timestamp>/
+    当前 EEF + K 个局部 world XYZ + valid mask
+        → EEF-relative / per-axis scale
+        → 小型 MLP
+        → Action Expert hidden condition
 
-其中包含 `raw_prediction.json`、`raw_output.txt`、三份 UVD/camera/world CSV、`trajectory_overlay.png` 和 `run_summary.json`。world XYZ 仍属于 LIBERO MuJoCo world，只用于离线几何判断，不等同于机器人基座动作。
+局部窗口按“当前 EEF 最近的有效路点 + 有序后继点”选择，并用单调 `min_progress_index` 防止交叉路径回跳。思路参考 3DWay 的局部 waypoint 选择，但没有复制 π0 实现。
 
-## 坐标与深度约定
+- **E0**：原始 SmolVLA，不安装 wrapper。
+- **E1**：局部三维路点 + MLP additive condition。
+- **E2**：E1 + 几何异常 gain。
 
-3D HAMSTER 的输出是 **[u, v, depth]**，不是直接的世界坐标 XYZ：
+E2 第一版特征只有工作空间越界比例、相邻路点跳跃和当前 EEF 偏离。该值是可关闭的异常条件增益，**不是规划正确概率**。`torch.compile` 尚未真实验证，配置固定为 `false`。详见 [SmolVLA 条件设计](docs/smolvla_trajectory_conditioning.md)。
 
-- u、v 使用 0 到 1000 的归一化图像坐标；
-- depth 是米；
-- 输入 RGB 与 depth 必须像素对齐；
-- 官方预处理把最长边缩放到 640；
-- 只有结合匹配分辨率的相机内参，才能反投影到相机坐标系；
-- 03 已记录并验证 `T_world_camera`，因此 04 可转换到 LIBERO MuJoCo world；尚未定义 world-to-base 时，不能把结果称为机器人基座坐标或直接动作。
+## 实验与恢复框架
 
-LIBERO probe 的约定是：
+`configs/experiments/` 共享相同 suite、task、init state、seed、batch size、学习率、smoke/pilot 预算，只改变条件开关。当前 `dataset_repo_id`、本地 SmolVLA path 和正式训练步数保持空值，避免误启动。
 
-- robosuite `IMAGE_CONVENTION` 显式设为 `opencv`，图像左上角为原点；
-- 模拟器原始 depth 是 `[0,1]` 的非线性 MuJoCo depth buffer，不是米；
-- 用 robosuite 官方 `get_real_depth_map` 转成 camera z-depth（米）；
-- `K` 对应采集时的 256×256 图像；
-- `T_world_camera` 表示从 camera 到 LIBERO MuJoCo world，另存其逆 `T_camera_world`；
-- `robot0_eef_pos` 属于 MuJoCo world，四元数顺序为 `xyzw`。
+已实现并经过 CPU 测试：
 
-推理脚本会把空输出、NaN/Inf、u/v 越界、深度不在 0.01 到 10 米范围内视为失败。该范围来自官方几何输入的有效深度掩码。
+- 轨迹与 action chunk 的 observation 时间索引对齐；
+- 因果可用轨迹选择和缺失回退；
+- 有限步训练循环、梯度裁剪、按步 checkpoint；
+- config digest 校验和 checkpoint 恢复；
+- 每 episode 评估结果、去重与汇总恢复；
+- 通用闭环 episode plan 入口；失败写独立日志且不标记完成，下次可重试；
+- 已预处理 tensor batch 的无 pickle NPZ + manifest 交换格式。
 
-## 本地基础测试
+可先生成不加载模型的 run plan：
 
-本地测试不下载模型，也不要求 GPU：
+    python scripts/prepare_experiment_run.py --experiment E1 --phase smoke
+
+它只固化 resolved config、digest、checkpoint/metrics/evaluation 路径，不会开始训练。`formal_steps` 当前为空，因此 formal plan 会主动拒绝生成。
+
+`scripts/run_closed_loop_evaluation.py` 接受显式 runner module；当前只提供统一恢复框架和 LIBERO 单任务 pilot plan，没有伪造一个未经 Stage C 验证的真实 simulator-policy runner。完整 LeRobot dataset/preprocessor 与 LIBERO runner 会在真实 Stage C 接口通过后再补，避免先写大量未经运行核实的训练胶水。
+
+## 集中 GPU 验收
+
+使用 [05_gpu_acceptance.ipynb](notebooks/05_gpu_acceptance.ipynb)，每阶段单独执行：
+
+1. **A 环境与数据**：两个解释器、固定版本、CUDA、checkpoint revision、RGB-D 与标定。
+2. **B 高层可行性**：执行一次 04 真实推理，保存图、world XYZ、诊断、耗时和统一缓存；结果明显不可用则停止。
+3. **C SmolVLA 冒烟**：本地 policy + 已预处理 batch，依次检查 E0/E1/E2 真实 forward/backward、动作维度、梯度、耗时和显存；不做 optimizer step。
+4. **D 单任务 pilot**：只在 A/B/C 通过后填写命令，少量训练与 rollout。
+5. **E 正式实验**：只在 D 通过并确定预算后填写命令。
+
+`acceptance_ledger.json` 记录每次尝试、成功/失败、耗时、GPU 和 artifacts。前置阶段未通过时后续阶段拒绝启动；重复运行已通过阶段不会覆盖证据。Stage C 只接受本地路径，不会偷偷下载模型。
+
+## 持久化与成本
+
+当前离线开发和短冒烟继续使用 `/content` 即可。开始长训练后，将 `RUN_DIR` 或 `VLA_PERSISTENT_ROOT` 指向已挂载的 Google Drive，用于权重缓存、轨迹、检查点、配置、评估与失败日志。大型文件始终由 `.gitignore` 排除，不提交 Git。
+
+3D HAMSTER 和 SmolVLA 不要求同时驻留同一 Python 进程：高层轨迹通过文件缓存跨环境交换，可分别释放显存。
+
+## 测试
 
     python -m unittest discover -s tests
 
-当前 21 个测试验证路点、深度、UVD 双向投影，以及 LIBERO depth buffer、标定矩阵、点云反投影、刚体变换、probe 选择和跨环境文件桥接。
+测试覆盖原有几何/LIBERO 校验，以及轨迹缓存、局部选择、条件张量、门控、梯度、action 对齐、Mock artifacts、batch 交换、配置切换、checkpoint/evaluation 恢复和 fail-stop ledger。
 
-## 已实现与待验证
-
-已由代码实现：
-
-- Git 项目骨架与忽略规则；
-- 两套环境的隔离方案和核心版本保护；
-- 固定上游 Git commit 与 checkpoint revision；
-- 六组官方示例的批量推理、输出保存、校验、计时和显存统计；
-- 相机坐标反投影与 LIBERO 设计接口；
-- 独立 LIBERO 环境 bootstrap、精确版本检查与固定 assets revision；
-- 单帧双相机 RGB-D、标定、末端位姿和点云抽样导出；
-- 最新有效 probe 选择、输入哈希复核与固定 checkpoint provenance 检查；
-- 单帧 UVD 到 camera/world XYZ、投影闭环、刚体长度一致性和诊断指标保存；
-- 04 Notebook 的无下载执行流程与验收门；
-- CPU 可执行的单元测试。
-
-已由服务器保存输出确认：
-
-- Planner 依赖解析、CUDA 冒烟和 9B BF16 checkpoint 加载；
-- 六组官方样例都有非空合法轨迹，保存的 overlay 目视合理；
-- 实际模型加载、推理耗时和显存记录。
-- LIBERO 单帧 probe 的 EGL 渲染、双相机 RGB/depth 对齐与完整 manifest 验收。
-
-仍需用户在 GPU 服务器执行确认：
-
-- 运行 04 Notebook，确认 LIBERO 指令能产生非空合法 UVD；
-- 目视检查 overlay，并结合 camera/world XYZ、末端距离和场景 depth 差值判断几何是否合理；
-- 将服务器端 03/04 原始输出在方便时统一下载归档；本阶段不要求先下载再继续。
-
-本地只运行了 CPU 单元测试，没有伪称本地已完成 04 的真实 GPU 推理。
-
-下一阶段见 [任务清单](docs/next_steps.md)。
+下一步状态见 [项目进度](docs/project_status.md) 和 [任务清单](docs/next_steps.md)。

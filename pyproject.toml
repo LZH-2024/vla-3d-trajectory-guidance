@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "trajectory-guidance"
 version = "0.1.0"
-description = "Reproducible 3D HAMSTER planner experiments for VLA trajectory guidance."
+description = "Offline-first 3D HAMSTER and SmolVLA trajectory-guidance experiments."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 dependencies = [

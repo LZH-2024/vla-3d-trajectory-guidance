@@ -1,0 +1,8 @@
+{
+  "experiment_id": "E1",
+  "description": "SmolVLA with a fixed local 3-D waypoint window and additive MLP condition.",
+  "trajectory_conditioning": {
+    "enabled": true,
+    "gate_mode": "none"
+  }
+}

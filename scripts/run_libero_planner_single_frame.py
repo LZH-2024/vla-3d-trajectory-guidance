@@ -28,6 +28,13 @@ from trajectory_guidance.libero_planner import (
     load_libero_planner_input,
 )
 from trajectory_guidance.libero_probe import write_json
+from trajectory_guidance.trajectory_record import (
+    CameraCalibration,
+    EpisodeIdentity,
+    ModelIdentity,
+    TrajectoryCache,
+    TrajectoryRecord,
+)
 from trajectory_guidance.validation import validate_waypoints
 from trajectory_guidance.visualization import save_trajectory_overlay
 
@@ -243,6 +250,7 @@ def main() -> int:
             "waypoints_uvd_csv": None,
             "waypoints_camera_xyz_csv": None,
             "waypoints_world_xyz_csv": None,
+            "trajectory_cache_record": None,
         }
         if len(waypoints):
             write_uvd_csv(output_dir / "waypoints_uvd.csv", waypoints, actions)
@@ -282,6 +290,60 @@ def main() -> int:
         )
         geometry_valid = geometry is not None and geometry.report.valid
         valid = bool(output_validation.valid and geometry_valid and preprocessing_valid)
+        if valid and geometry is not None:
+            task = planner_input.manifest["task"]
+            episode_id = (
+                f"{task['suite']}-task{task['task_id']}-"
+                f"init{task['init_state_id']}-seed{task['seed']}"
+            )
+            trajectory_id = f"{episode_id}-obs0-{camera_name}-3d-hamster"
+            gripper_events = []
+            for action in actions:
+                normalized = (action or "").lower()
+                if "close" in normalized:
+                    gripper_events.append("close")
+                elif "open" in normalized:
+                    gripper_events.append("open")
+                else:
+                    gripper_events.append("none")
+            cache_record = TrajectoryRecord(
+                trajectory_id=trajectory_id,
+                source="prediction",
+                episode=EpisodeIdentity(
+                    dataset="libero-simulation",
+                    suite=str(task["suite"]),
+                    task_id=str(task["task_id"]),
+                    episode_id=episode_id,
+                    init_state_id=int(task["init_state_id"]),
+                    observation_index=0,
+                ),
+                model=ModelIdentity(
+                    name=str(planner["model_id"]),
+                    version=str(planner["model_revision"]),
+                    code_revision=str(planner["repo_commit"]),
+                ),
+                instruction=planner_input.instruction,
+                input_image_sha256=planner_input.hashes["rgb_sha256"],
+                coordinate_frame="libero_mujoco_world",
+                waypoints_xyz_m=geometry.world_xyz_m,
+                valid_mask=np.ones(len(geometry.world_xyz_m), dtype=np.bool_),
+                gripper_events=tuple(gripper_events),
+                calibration=CameraCalibration.from_arrays(
+                    camera_name=camera_name,
+                    image_width=planner_input.rgb.width,
+                    image_height=planner_input.rgb.height,
+                    intrinsics_k=planner_input.intrinsics,
+                    t_world_camera=planner_input.t_world_camera,
+                ),
+                available_at_observation_index=0,
+                provenance={
+                    "planner_output_format": "normalized_uv_0_1000_plus_camera_z_depth_m",
+                    "source_probe_manifest": str(planner_input.manifest_path),
+                    "raw_prediction_json": str(output_dir / "raw_prediction.json"),
+                },
+            )
+            cache_path = TrajectoryCache(output_dir / "trajectory_cache").save(cache_record)
+            artifacts["trajectory_cache_record"] = str(cache_path)
         prediction = {
             "schema_version": 1,
             "created_at_utc": datetime.now(timezone.utc).isoformat(),

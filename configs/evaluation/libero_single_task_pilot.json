@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "status": "pilot_plan_not_executed",
+  "episodes": [
+    {
+      "episode_id": "libero-spatial-task0-init0-seed42",
+      "suite": "libero_spatial",
+      "task_id": 0,
+      "init_state_id": 0,
+      "seed": 42,
+      "max_steps": 300
+    }
+  ]
+}

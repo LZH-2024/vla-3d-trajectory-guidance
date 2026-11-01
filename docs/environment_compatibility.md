@@ -67,14 +67,14 @@
 
 ### /content/.venv
 
-当前用途：LIBERO 单帧 observation probe；后续才用于 LeRobot / SmolVLA。
+当前用途：LIBERO observation、固定 LeRobot 与后续 SmolVLA Stage C 冒烟。
 
 - Python 3.12.13；
 - 保留参考 Torch、Torchvision、TorchCodec、NumPy、NVIDIA NPP；
 - LeRobot 固定到审计 commit，项目版本 0.6.2；
 - Transformers 5.5.4，Hugging Face Hub 1.33.0；
 - hf-libero 0.1.4、robosuite 1.4.0、robomimic 0.2.0、MuJoCo 3.8.1；
-- 只安装 LeRobot `[libero]` extra，不启动 SmolVLA 训练；
+- 当前以固定 commit 的 `[libero]` 环境为基础；真实 SmolVLA 冒烟仍需核对本地 policy 所需 extra，但不得改变受保护核心版本；
 - 安装 editable checkout 时使用 uv `--no-sources`，避免 LeRobot 的开发期 `tool.uv.sources` 把参考 CUDA TorchCodec 静默改成 CPU wheel；实际依赖仍来自固定 commit 的标准项目 metadata；
 - `MUJOCO_GL=egl` 由运行命令显式传入；
 - 独立子进程固定 `MPLBACKEND=Agg`，防止继承 Notebook 内核的 `matplotlib_inline` backend；该 backend 只用于无界面导入与静态输出；
@@ -102,11 +102,14 @@ hf-libero 0.1.4 的默认下载函数未传 `revision`，会读取 `lerobot/libe
 
 上游 3D HAMSTER 只给出了部分范围依赖，没有官方完整 lockfile。本项目不会伪造一个未经 Colab 验证的全平台 lockfile。第一次成功运行后，应保留 outputs/environment/planner_environment.json，并可额外执行 uv pip freeze 形成该 Colab 镜像的冻结快照。
 
-## 仍需运行时确认
+## 已确认与仍需确认
 
-- `/content/.venv` 安装 LeRobot `[libero]` 后是否仍完整保留受保护核心版本；
-- 当前服务器驱动上的 MuJoCo EGL offscreen context；
-- 固定 assets snapshot 的真实下载与场景加载；
-- 双相机 RGB-D、米制深度和标定矩阵的运行时结果。
+03 的服务器保存输出已经确认 `/content/.venv` 受保护版本、固定 LeRobot checkout、MuJoCo EGL、固定 assets、双相机 RGB-D、米制 depth 与标定。原始 outputs 尚未下载，本地证据仍以 Notebook 保存输出为准。
 
-这些需要在 Linux GPU 服务器 / Colab 上执行 03 Notebook；本地 CPU 静态测试不能替代。
+仍需在下一次 GPU 会话确认：
+
+- 04 的真实单帧 3D HAMSTER 输出与几何可用性；
+- 本地 SmolVLA policy 与固定 commit 的真实加载；
+- E0/E1/E2 在真实 `SmolVLAPolicy` 上的 forward/backward、梯度、动作维度与显存。
+
+这些由 05 Notebook 的 Stage A/B/C 分别执行；本地 CPU Mock 不能替代。

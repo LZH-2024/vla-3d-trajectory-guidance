@@ -1,6 +1,6 @@
 # LIBERO 接口预留
 
-单帧 observation probe 已在服务器通过。当前增加只读文件桥接来调用 Planner，仍不运行 policy、不发送 action，也不修改 SmolVLA。
+单帧 observation probe 已在服务器通过。当前文件桥接既支持 04 的单帧 Planner，也把合法 world XYZ 写入统一轨迹缓存；离线阶段仍不运行 policy、不发送 simulator action。
 
 ## 数据流
 
@@ -10,8 +10,8 @@
         -> 3D HAMSTER 输出 normalized UVD
         -> K 反投影到 camera XYZ
         -> 经已核实方向的外参变换到 world/base XYZ
-        -> 缓存轨迹和全部元数据
-        -> 后续供 SmolVLA 训练或评估读取
+        -> 统一 TrajectoryRecord（frame、单位、mask、event、标定、来源、因果时刻）
+        -> 局部路点选择与 SmolVLA E1/E2 条件接口
 
 ## 已核实的 LIBERO 约定
 
@@ -54,7 +54,7 @@
 - 稀疏 camera/world 点云样本；
 - 末端 world position、`xyzw` quaternion 与 `T_world_eef`。
 
-`src/trajectory_guidance/libero_planner.py` 与 `scripts/run_libero_planner_single_frame.py` 现已实现同一帧的 Planner 调用准备与几何检查：
+`src/trajectory_guidance/libero_planner.py` 与 `scripts/run_libero_planner_single_frame.py` 现已实现同一帧的 Planner 调用准备、几何检查和 prediction cache：
 
 - 自动选择最新的有效 probe；
 - 复核 manifest、坐标约定、输入文件 SHA-256、depth、K 与 `T_world_camera`；
@@ -62,5 +62,8 @@
 - 保存原始 UVD、camera XYZ、LIBERO world XYZ 和 2D overlay；
 - 用 XYZ 重投影回 UVD，检查数值闭环和刚体段长不变性；
 - 记录路点与场景表面 depth 差值，但不把场景 depth 覆盖到 Planner 路点上。
+- 仅在全部校验通过时保存 source=`prediction` 的 JSON/CSV/NPZ 轨迹记录，并保留输入哈希、模型 revision 和相机标定。
 
 04 的通过只能说明单帧输出在当前标定下可转换且数值自洽，不能证明低层控制可执行或 LIBERO 任务成功。
+
+低层读取由 `trajectory_dataset.py` 执行因果筛选：轨迹必须在当前 observation 时刻已经可用；Oracle / 未来专家轨迹默认拒绝。完整格式见 [轨迹数据契约](trajectory_data_contract.md)。

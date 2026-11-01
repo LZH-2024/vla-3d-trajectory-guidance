@@ -1,0 +1,8 @@
+{
+  "experiment_id": "E0",
+  "description": "Original SmolVLA baseline without trajectory input.",
+  "trajectory_conditioning": {
+    "enabled": false,
+    "gate_mode": "none"
+  }
+}
