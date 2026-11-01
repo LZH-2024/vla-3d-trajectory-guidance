@@ -70,7 +70,7 @@ class ConfigurationTests(unittest.TestCase):
             self.libero["probe"]["accepted_depth_range_m"],
         )
 
-    def test_gpu_acceptance_is_isolated_and_formal_stages_are_opt_in(self) -> None:
+    def test_gpu_acceptance_is_isolated_and_formal_stage_is_opt_in(self) -> None:
         self.assertEqual(
             self.gpu_acceptance["planner_python"],
             "/content/.venv_planner/bin/python",
@@ -92,7 +92,18 @@ class ConfigurationTests(unittest.TestCase):
             self.gpu_acceptance["stage_c"]["vlm_revision"],
             "7b375e1b73b11138ff12fe22c8f2822d8fe03467",
         )
-        self.assertIsNone(self.gpu_acceptance["stage_d"]["command"])
+        self.assertEqual(
+            self.gpu_acceptance["stage_d"]["command"][0],
+            self.gpu_acceptance["smolvla_python"],
+        )
+        self.assertIn(
+            "run_stage_d_single_task_pilot.py",
+            self.gpu_acceptance["stage_d"]["command"][1],
+        )
+        self.assertEqual(
+            self.libero["libero"]["assets_revision"],
+            "0b3ea86be5fe169d0fd036ae63d1070ec09e90f6",
+        )
         self.assertIsNone(self.gpu_acceptance["stage_e"]["command"])
         self.assertFalse(self.gpu_acceptance["persistence"]["enabled"])
 

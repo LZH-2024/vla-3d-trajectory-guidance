@@ -138,7 +138,7 @@ E2 第一版特征只有工作空间越界比例、相邻路点跳跃和当前 E
 
 它只固化 resolved config、digest、checkpoint/metrics/evaluation 路径，不会开始训练。`formal_steps` 当前为空，因此 formal plan 会主动拒绝生成。
 
-Stage D 使用 `prepare_smolvla_stage_d_inputs.py` 将 Stage B 观测水平翻转到固定数据集的实际图像约定，再与全部同任务 demonstration 起点按语言、EEF 和双 RGB 视角做阈值匹配。只有唯一匹配通过，才生成带真实 `50×7` action target 的 batch。`run_stage_d_single_task_pilot.py` 随后让 E0/E1/E2 分别从同一固定 checkpoint 开始，使用相同 batch 和逐步 RNG seed 做 2 次 optimizer update，再各运行一次 task0/init0 闭环。此入口是 GPU plumbing gate；单 chunk、2 step 和单 rollout 都不是论文实验。
+Stage D 使用 `prepare_smolvla_stage_d_inputs.py` 将 Stage B 观测水平翻转到固定数据集的实际图像约定，再与全部同任务 demonstration 起点按语言、EEF 和双 RGB 视角做阈值匹配。只有唯一匹配通过，才生成带真实 `50×7` action target 的 batch。闭环前会下载并校验固定 revision 的 LIBERO assets，之后模型与 rollout 保持离线。`run_stage_d_single_task_pilot.py` 随后让 E0/E1/E2 分别从同一固定 checkpoint 开始，使用相同 batch 和逐步 RNG seed 做 2 次 optimizer update，再各运行一次 task0/init0 闭环。此入口是 GPU plumbing gate；单 chunk、2 step 和单 rollout 都不是论文实验。
 
 ## 集中 GPU 验收
 

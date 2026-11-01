@@ -57,9 +57,10 @@ Stage D 已配置，不需要手填 policy、dataset 或 batch 路径。执行 0
 1. 从 Stage B/C ledger 自动解析 prediction trajectory、原始 probe 和本地 SmolVLA checkpoint；
 2. 从固定 `lerobot/libero@a1aaacb7f6cd6ee5fb43120f673cebb0cfea7dd4` 中筛选同语言候选 episode；
 3. 将直连 `OffScreenRenderEnv` probe 图像水平翻转到该固定数据集的实际图像约定，再用初始 EEF 与全部同任务 episode 的 agentview/wrist 解码图像差异选择唯一匹配；匹配不通过时不会加载模型训练；
-4. 生成带真实 demonstration `50×7` action target、prediction trajectory condition 和因果 metadata 的单 batch；
-5. E0/E1/E2 各自从同一 checkpoint 开始，用相同 batch 与逐 step RNG seed 完成 2 个 optimizer step；
-6. 每组运行一次 `libero_spatial` task0/init0 闭环并保存 action/EEF trace、稀疏截图、耗时和显存。
+4. 在线准备并校验固定 `lerobot/libero-assets@0b3ea86be5fe169d0fd036ae63d1070ec09e90f6`，随后模型和 rollout 切回离线模式；
+5. 生成带真实 demonstration `50×7` action target、prediction trajectory condition 和因果 metadata 的单 batch；
+6. E0/E1/E2 各自从同一 checkpoint 开始，用相同 batch 与逐 step RNG seed 完成 2 个 optimizer step；
+7. 每组运行一次 `libero_spatial` task0/init0 闭环并保存 action/EEF trace、稀疏截图、耗时和显存。
 
 Stage D 的通过含义只是三条真实数据、优化器和闭环管线均执行完成。任务成功与否会记录，但单次 rollout 不构成成功率；2 step/single chunk 也不构成有效训练。若进程在某组完成后中断，新的 acceptance attempt 会保留旧日志并从固定 base 重跑这个很短的 gate。
 

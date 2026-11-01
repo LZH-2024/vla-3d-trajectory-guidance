@@ -111,6 +111,30 @@ def main() -> int:
     if prepared is None:
         raise RuntimeError("Stage-D input preparation did not produce valid evidence")
 
+    assets_manifest_path = output_dir / "libero_assets.json"
+    assets_manifest = _valid_summary(assets_manifest_path)
+    if assets_manifest is None:
+        asset_env = subprocess_env.copy()
+        asset_env.pop("HF_HUB_OFFLINE", None)
+        asset_env.pop("TRANSFORMERS_OFFLINE", None)
+        _run(
+            [
+                str(env_python),
+                str(project_root / "scripts" / "prepare_libero_assets.py"),
+                "--project-root",
+                str(project_root),
+                "--config",
+                str(config_path),
+                "--output",
+                str(assets_manifest_path),
+            ],
+            output_dir / "prepare_libero_assets.log",
+            env=asset_env,
+        )
+        assets_manifest = _valid_summary(assets_manifest_path)
+    if assets_manifest is None:
+        raise RuntimeError("pinned LIBERO assets were not prepared for Stage D")
+
     results: list[dict[str, Any]] = []
     for experiment_id in ("E0", "E1", "E2"):
         experiment_dir = output_dir / experiment_id
@@ -129,6 +153,8 @@ def main() -> int:
                     str(inputs_path),
                     "--experiment",
                     experiment_id,
+                    "--assets-manifest",
+                    str(assets_manifest_path),
                     "--output-dir",
                     str(experiment_dir),
                 ],
@@ -147,6 +173,7 @@ def main() -> int:
         "scope": "stage_d_bounded_single_task_real_data_optimizer_and_rollout_pilot",
         "elapsed_seconds": time.perf_counter() - started,
         "inputs": str(inputs_path),
+        "libero_assets": str(assets_manifest_path),
         "experiments": [
             {
                 "experiment_id": result["experiment_id"],

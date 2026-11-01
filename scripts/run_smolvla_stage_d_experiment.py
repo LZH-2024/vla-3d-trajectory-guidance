@@ -32,6 +32,7 @@ from torch import Tensor
 from trajectory_guidance.batch_artifact import load_batch_artifact
 from trajectory_guidance.experiment import load_experiment_config
 from trajectory_guidance.libero_pilot import image_hwc_float01, normalized_instruction
+from trajectory_guidance.libero_assets import activate_libero_assets, validate_libero_assets
 from trajectory_guidance.libero_probe import sha256_file
 from trajectory_guidance.trajectory_conditioning import (
     TRAJECTORY_EEF_KEY,
@@ -50,6 +51,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config", type=Path)
     parser.add_argument("--inputs", type=Path, required=True)
     parser.add_argument("--experiment", choices=["E0", "E1", "E2"], required=True)
+    parser.add_argument("--assets-manifest", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     return parser.parse_args()
 
@@ -167,7 +169,9 @@ def _rollout(
     settings: dict[str, Any],
     output_dir: Path,
     device: torch.device,
+    assets_dir: Path,
 ) -> dict[str, Any]:
+    activate_libero_assets(assets_dir)
     import gymnasium as gym
 
     from lerobot.envs.libero import create_libero_envs
@@ -363,6 +367,21 @@ def main() -> int:
         raise ValueError(f"Stage-D batch metadata mismatch: {mismatches}")
     batch = _prepare_batch(batch_numpy, device)
 
+    assets_manifest = json.loads(
+        args.assets_manifest.resolve().read_text(encoding="utf-8")
+    )
+    if assets_manifest.get("valid") is not True:
+        raise ValueError("Stage-D LIBERO asset manifest is invalid")
+    libero_config_path = (
+        project_root / acceptance["stage_a"]["libero_config"]
+    ).resolve()
+    libero_config = json.loads(libero_config_path.read_text(encoding="utf-8"))["libero"]
+    if assets_manifest.get("repo_id") != libero_config["assets_repo_id"]:
+        raise ValueError("Stage-D LIBERO asset repository does not match the pinned config")
+    if assets_manifest.get("revision") != libero_config["assets_revision"]:
+        raise ValueError("Stage-D LIBERO asset revision does not match the pinned config")
+    assets_dir = validate_libero_assets(assets_manifest["assets_dir"])
+
     experiment = load_experiment_config(project_root, args.experiment)
     os.environ["HF_HUB_OFFLINE"] = "1"
     os.environ["TRANSFORMERS_OFFLINE"] = "1"
@@ -462,6 +481,7 @@ def main() -> int:
         settings=settings,
         output_dir=output_dir,
         device=device,
+        assets_dir=assets_dir,
     )
     payload = {
         "schema_version": 1,
@@ -476,6 +496,12 @@ def main() -> int:
         "training_seconds": training_seconds,
         "checkpoint": checkpoint,
         "rollout": rollout,
+        "libero_assets": {
+            "repo_id": assets_manifest["repo_id"],
+            "revision": assets_manifest["revision"],
+            "assets_dir": str(assets_dir),
+            "manifest": str(args.assets_manifest.resolve()),
+        },
         "gpu": _gpu_snapshot(),
         "python": {"version": platform.python_version(), "executable": sys.executable},
         "limitations": [

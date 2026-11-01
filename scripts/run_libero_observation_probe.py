@@ -34,6 +34,7 @@ from trajectory_guidance.libero_probe import (
     validate_depth_buffer,
     write_json,
 )
+from trajectory_guidance.libero_assets import download_pinned_libero_assets
 from trajectory_guidance.validation import validate_depth_map
 
 
@@ -57,34 +58,6 @@ def ensure_empty_output(path: Path) -> None:
 
 def package_version(name: str) -> str:
     return importlib.metadata.version(name)
-
-
-def download_pinned_assets(libero_config: dict[str, Any]) -> tuple[Path, str]:
-    from huggingface_hub import HfApi, snapshot_download
-
-    revision = libero_config["assets_revision"]
-    info = HfApi().dataset_info(libero_config["assets_repo_id"], revision=revision)
-    if info.sha != revision:
-        raise RuntimeError(f"asset revision resolved to {info.sha}, expected {revision}")
-    destination = Path(libero_config["assets_dir"]).resolve()
-    destination.mkdir(parents=True, exist_ok=True)
-    snapshot_download(
-        repo_id=libero_config["assets_repo_id"],
-        repo_type="dataset",
-        revision=revision,
-        local_dir=destination,
-    )
-    required = [
-        "articulated_objects",
-        "stable_scanned_objects",
-        "turbosquid_objects",
-        "stable_hope_objects",
-        "scenes",
-    ]
-    missing = [name for name in required if not (destination / name).exists()]
-    if missing:
-        raise RuntimeError(f"pinned LIBERO asset snapshot is incomplete; missing {missing}")
-    return destination, info.sha
 
 
 def main() -> int:
@@ -123,7 +96,7 @@ def main() -> int:
     libero_path_config = prepare_libero_config(
         libero_config["config_dir"], libero_config["datasets_dir"]
     )
-    assets_dir, assets_revision = download_pinned_assets(libero_config)
+    assets_dir, assets_revision = download_pinned_libero_assets(libero_config)
 
     # Imports below this point may initialize MuJoCo / EGL. The environment
     # variables and non-interactive LIBERO path config are already in place.
