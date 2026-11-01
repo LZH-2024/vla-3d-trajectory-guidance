@@ -52,6 +52,30 @@ def gpu_info(torch: Any) -> dict[str, Any]:
     }
 
 
+def ensure_npp_loader_path() -> tuple[Path, list[str]]:
+    """Re-exec once so the dynamic loader sees the venv's NPP directory."""
+
+    python_dir = f"python{sys.version_info.major}.{sys.version_info.minor}"
+    npp_dir = Path(sys.prefix) / "lib" / python_dir / "site-packages" / "nvidia" / "npp" / "lib"
+    libraries = sorted(str(path) for path in npp_dir.glob("libnppicc.so*"))
+    if not libraries:
+        raise RuntimeError(f"NVIDIA NPP library was not found under {npp_dir}")
+
+    current = os.environ.get("LD_LIBRARY_PATH", "")
+    paths = [path for path in current.split(os.pathsep) if path]
+    if str(npp_dir) not in paths:
+        if os.environ.get("TRAJECTORY_GUIDANCE_NPP_REEXEC") == "1":
+            raise RuntimeError(
+                f"NPP directory is still absent from the loader path after re-exec: {npp_dir}"
+            )
+        updated_env = os.environ.copy()
+        updated_env["LD_LIBRARY_PATH"] = str(npp_dir) + (os.pathsep + current if current else "")
+        updated_env["TRAJECTORY_GUIDANCE_NPP_REEXEC"] = "1"
+        print(f"Re-executing with NPP loader path: {npp_dir}", flush=True)
+        os.execve(sys.executable, [sys.executable, *sys.argv], updated_env)
+    return npp_dir, libraries
+
+
 def main() -> int:
     args = parse_args()
     project_root = args.project_root.resolve()
@@ -78,6 +102,7 @@ def main() -> int:
             f"MUJOCO_GL must be explicitly set to {libero['render_backend']!r}, "
             f"got {os.environ.get('MUJOCO_GL')!r}"
         )
+    npp_dir, npp_libraries = ensure_npp_loader_path()
 
     expected_versions = {
         "torch": core["torch"],
@@ -149,7 +174,9 @@ def main() -> int:
             "CUDA_VISIBLE_DEVICES": os.environ.get("CUDA_VISIBLE_DEVICES"),
             "LIBERO_CONFIG_PATH": os.environ["LIBERO_CONFIG_PATH"],
             "libero_config_file": str(libero_config_path),
+            "npp_library_dir": str(npp_dir),
         },
+        "npp_libraries": npp_libraries,
         "versions": actual_versions,
         "provenance": {
             "lerobot_repo_url": libero["repo_url"],
