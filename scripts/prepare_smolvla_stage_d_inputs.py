@@ -380,6 +380,41 @@ def main() -> int:
         diagnostics.append(diagnostic)
 
     match_diagnostics_path = output_root / "observation_match.json"
+    comparison_previews: list[dict[str, Any]] = []
+    for rank, diagnostic in enumerate(
+        sorted(
+            diagnostics,
+            key=lambda item: (
+                float(item["normalized_score"]),
+                int(item["episode_index"]),
+            ),
+        )[:3],
+        start=1,
+    ):
+        episode = int(diagnostic["episode_index"])
+        sample = samples[episode]
+        agentview_path = output_root / (
+            f"candidate_{rank:02d}_episode_{episode}_agentview.png"
+        )
+        wrist_path = output_root / f"candidate_{rank:02d}_episode_{episode}_wrist.png"
+        _save_comparison(
+            agentview_path,
+            probe_agentview,
+            sample["observation.images.image"],
+        )
+        _save_comparison(
+            wrist_path,
+            probe_wrist,
+            sample["observation.images.image2"],
+        )
+        comparison_previews.append(
+            {
+                "rank": rank,
+                "episode_index": episode,
+                "agentview_stage_b_vs_dataset_vs_absdiff": str(agentview_path),
+                "wrist_stage_b_vs_dataset_vs_absdiff": str(wrist_path),
+            }
+        )
     try:
         best = select_unique_candidate(diagnostics, thresholds)
     except Exception as exc:
@@ -392,6 +427,7 @@ def main() -> int:
                 "thresholds": thresholds.__dict__,
                 "eef_prefilter": eef_ranking,
                 "candidates": diagnostics,
+                "comparison_previews": comparison_previews,
             },
         )
         raise
@@ -431,6 +467,7 @@ def main() -> int:
             "eef_prefilter": eef_ranking,
             "selected": dict(best),
             "candidates": diagnostics,
+            "comparison_previews": comparison_previews,
         },
     )
 
