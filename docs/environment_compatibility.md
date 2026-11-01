@@ -109,4 +109,4 @@ hf-libero 0.1.4 的默认下载函数未传 `revision`，会读取 `lerobot/libe
 
 03 的服务器保存输出已经确认 `/content/.venv` 受保护版本、固定 LeRobot checkout、MuJoCo EGL、固定 assets、双相机 RGB-D、米制 depth 与标定。原始 outputs 尚未下载，本地证据仍以 Notebook 保存输出为准。
 
-04 / Stage B 与真实 SmolVLA Stage C 已在服务器通过。下一项待服务器确认的是固定 demonstration revision 的 episode 匹配、真实 action preprocessing、2-step optimizer smoke 和单次 LIBERO rollout；这些由 05 Notebook 的 Stage D 执行。本次按用户要求不在本地运行 CPU 测试。
+04 / Stage B、真实 SmolVLA Stage C 与 Stage D plumbing gate 已在服务器通过。Stage D 的固定 demonstration 匹配、真实 action preprocessing、E0/E1/E2 两步 optimizer 与三次 300-step rollout 均完整执行；三组任务均未成功且累计 reward 为 0。下一项是 05 中的 0-step 原始 E0 补充诊断，用于定位失败来源，不是正式成功率实验。本地 62 项 CPU 测试通过，但该补充 rollout 仍待服务器 GPU 执行。

@@ -15,10 +15,10 @@
 | 统一轨迹缓存与因果读取 | **CPU 测试通过** | JSON/CSV/NPZ、SHA-256、Oracle 默认拒绝 |
 | SmolVLA E1/E2 条件模块 | **CPU 小模型测试通过** | 维度、前后向、梯度、缺失回退；非真实 SmolVLA |
 | 真实 SmolVLA E0/E1/E2 冒烟 | **已在服务器真实运行通过** | Stage C 完成真实 forward/backward/inference 与 adapter 梯度检查 |
-| Stage D 单任务 optimizer/rollout | **代码已准备，待服务器 GPU** | 自动匹配真实 demonstration；每组仅 2 step + 1 rollout，不代表有效训练 |
+| Stage D 单任务 optimizer/rollout | **已在服务器完成 GPU plumbing 验收** | E0/E1/E2 均完成 2 step + 300-step rollout；三次均未成功且 reward 为 0，不代表有效训练或成功率 |
 | 正式 E0/E1/E2 实验 | **未开始** | 正式预算故意保持未设置 |
 
-本地没有执行本次新增 Stage D、正式训练或闭环评估，也没有据此编造任务成功率。Stage C 保存的 loss 只用于有限值检查，不能横向解释模型质量。
+Stage D 证明真实 demonstration、optimizer、checkpoint 与闭环接口能够完整运行，但没有证明策略能完成任务。当前新增的补充诊断会再运行一次 **0 optimizer step 的原始 E0**，并对比已有四条 rollout trace；它仍然只是定位失败原因，不是正式实验。Stage C/Stage D 保存的 loss 不能横向解释模型质量。
 
 ## 固定环境与上游
 
@@ -140,6 +140,8 @@ E2 第一版特征只有工作空间越界比例、相邻路点跳跃和当前 E
 
 Stage D 使用 `prepare_smolvla_stage_d_inputs.py` 将 Stage B 观测水平翻转到固定数据集的实际图像约定，再与全部同任务 demonstration 起点按语言、EEF 和双 RGB 视角做阈值匹配。只有唯一匹配通过，才生成带真实 `50×7` action target 的 batch。闭环前会下载并校验固定 revision 的 LIBERO assets，之后模型与 rollout 保持离线。`run_stage_d_single_task_pilot.py` 随后让 E0/E1/E2 分别从同一固定 checkpoint 开始，使用相同 batch 和逐步 RNG seed 做 2 次 optimizer update，再各运行一次 task0/init0 闭环。此入口是 GPU plumbing gate；单 chunk、2 step 和单 rollout 都不是论文实验。
 
+Stage D 已完成后，可在 05 Notebook 运行“Stage D 补充诊断”单元。`run_stage_d_diagnostics.py` 只新增一次不更新参数的原始 E0 rollout，随后只读已有 E0/E1/E2 trace，汇总动作幅度与饱和比例、末端位移与路径、reward、未校准 gate gain，并展示各组首末快照。重复运行会复用已完成的 0-step E0 结果。
+
 ## 集中 GPU 验收
 
 使用 [05_gpu_acceptance.ipynb](notebooks/05_gpu_acceptance.ipynb)，每阶段单独执行：
@@ -162,6 +164,6 @@ Stage D 使用 `prepare_smolvla_stage_d_inputs.py` 将 Stage B 观测水平翻�
 
     python -m unittest discover -s tests
 
-测试覆盖原有几何/LIBERO 校验，以及轨迹缓存、局部选择、条件张量、门控、梯度、action 对齐、Mock artifacts、batch 交换、配置切换、checkpoint/evaluation 恢复和 fail-stop ledger。本次按用户要求未在本地重跑 CPU 测试；新增 Stage D 直接留给服务器 GPU 验收。
+测试覆盖原有几何/LIBERO 校验，以及轨迹缓存、局部选择、条件张量、门控、梯度、action 对齐、Mock artifacts、batch 交换、配置切换、checkpoint/evaluation 恢复、fail-stop ledger 与 rollout trace 诊断。当前共 62 项 CPU 测试通过；0-step 原始 E0 仍需在服务器 GPU 上执行。
 
 下一步状态见 [项目进度](docs/project_status.md) 和 [任务清单](docs/next_steps.md)。

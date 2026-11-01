@@ -13,8 +13,9 @@
 - [x] 05 自动准备固定 LeRobot preprocessor 输出的单个因果 smoke batch artifact，不使用未来专家轨迹，并明确标记 synthetic action/gripper 限制。
 - [x] **Stage C**：真实 SmolVLA E0/E1/E2 forward/backward、adapter 梯度、动作维度与显存均通过。
 - [x] 根据固定 LeRobot API 补齐 pinned dataset、真实 action/preprocessor 与闭环装配。
-- [ ] **Stage D**：执行自动 observation match、E0/E1/E2 各 2 step 和各 1 次 rollout；检查 checkpoint 与结果记录。
-- [ ] D 通过后确定正式训练步数、episode 数和 Google Drive 目录。
+- [x] **Stage D**：自动 observation match、E0/E1/E2 各 2 step 和各 1 次 300-step rollout 均执行完成；三组任务均未成功，D 仅通过 plumbing gate。
+- [ ] 运行 05 的 Stage D 补充诊断：增加原始 E0 0-step rollout，并对比四组 trace 与首末截图。
+- [ ] 根据补充诊断确定先修 rollout/preprocessing，还是设计正式训练步数、episode 数和 Google Drive 目录。
 - [ ] **Stage E**：使用相同任务、示范、初始状态、动作设置和预算比较 E0/E1/E2。
 
-当前不要执行正式训练、完整闭环或复杂融合模块。服务器原始 03/04 outputs 可在方便时归档，不阻塞本地开发。
+当前不要执行正式训练、多任务闭环评估或复杂融合模块。服务器原始 03/04 outputs 可在方便时归档，不阻塞当前诊断。

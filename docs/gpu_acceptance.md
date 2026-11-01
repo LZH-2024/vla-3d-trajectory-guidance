@@ -64,6 +64,15 @@ Stage D 已配置，不需要手填 policy、dataset 或 batch 路径。执行 0
 
 Stage D 的通过含义只是三条真实数据、优化器和闭环管线均执行完成。任务成功与否会记录，但单次 rollout 不构成成功率；2 step/single chunk 也不构成有效训练。若进程在某组完成后中断，新的 acceptance attempt 会保留旧日志并从固定 base 重跑这个很短的 gate。
 
+当前保存的服务器记录中，E0/E1/E2 均完成 300 step，但三组 `success=false` 且累计 reward 为 0。因此 D 已通过 plumbing gate，尚未通过任务效果验证。05 末尾的“Stage D 补充诊断”单元会：
+
+1. 复用同一固定 checkpoint、LIBERO assets、task0/init0 与 rollout seed；
+2. 只新增一次 `optimizer_steps=0` 的原始 E0 rollout；
+3. 只读已有 E0/E1/E2 trace，对比动作幅度/饱和、gripper、EEF 位移/路径、reward 和 gate gain；
+4. 保存 `stage_d_diagnostics/summary.json` 与 0-step E0 的 trace/截图。
+
+该诊断不重跑 A/B/C 或两步训练，重复执行会复用有效的 0-step E0 summary。单次结果只能帮助定位失败来源，不能作为成功率结论。
+
 ## E：正式实验
 
 Stage E 仍保持 command 与正式预算为空。只有 D 的输出经过检查、真实训练数据覆盖范围确定后，才配置正式 E0/E1/E2 训练与多初始状态评估。

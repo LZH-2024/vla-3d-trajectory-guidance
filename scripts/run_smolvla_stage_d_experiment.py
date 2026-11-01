@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run one bounded real-data optimizer smoke and one LIBERO rollout.
+"""Run one bounded real-data optimizer smoke or no-update diagnostic rollout.
 
 This is Stage-D plumbing evidence, not a meaningful fine-tuning budget.  Each
 E0/E1/E2 process starts from the same pinned SmolVLA checkpoint and uses the
@@ -52,6 +52,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--inputs", type=Path, required=True)
     parser.add_argument("--experiment", choices=["E0", "E1", "E2"], required=True)
     parser.add_argument("--assets-manifest", type=Path, required=True)
+    parser.add_argument("--optimizer-steps", type=int)
     parser.add_argument("--output-dir", type=Path, required=True)
     return parser.parse_args()
 
@@ -418,58 +419,78 @@ def main() -> int:
     torch.cuda.synchronize()
     load_seconds = time.perf_counter() - load_started
 
-    trainable = [parameter for parameter in runner.parameters() if parameter.requires_grad]
-    if not trainable:
-        raise RuntimeError("no trainable SmolVLA parameters were found")
-    optimizer = torch.optim.AdamW(
-        trainable,
-        lr=float(experiment["training"]["learning_rate"]),
-        betas=tuple(getattr(runtime_config, "optimizer_betas", (0.9, 0.95))),
-        eps=float(getattr(runtime_config, "optimizer_eps", 1e-8)),
-        weight_decay=float(getattr(runtime_config, "optimizer_weight_decay", 1e-10)),
+    optimizer_steps = (
+        int(settings["optimizer_steps"])
+        if args.optimizer_steps is None
+        else int(args.optimizer_steps)
     )
-    optimizer_steps = int(settings["optimizer_steps"])
+    if optimizer_steps < 0:
+        raise ValueError("optimizer_steps must be non-negative")
+    if optimizer_steps == 0 and args.experiment != "E0":
+        raise ValueError("zero-update diagnostic rollout is supported only for E0")
     base_seed = int(experiment["training"]["seed"])
     losses: list[float] = []
     gradient_norms: list[float] = []
-    runner.train()
-    training_started = time.perf_counter()
-    for step in range(optimizer_steps):
-        # Reset after adapter construction so E0/E1/E2 see identical FM noise/time RNG.
-        torch.manual_seed(base_seed + step)
-        torch.cuda.manual_seed_all(base_seed + step)
-        optimizer.zero_grad(set_to_none=True)
-        loss = _loss_from_output(runner(batch))
-        if loss.ndim != 0 or not torch.isfinite(loss):
-            raise RuntimeError(f"non-finite Stage-D loss at step {step + 1}")
-        loss.backward()
-        gradient_norm = torch.nn.utils.clip_grad_norm_(
-            trainable, float(experiment["training"]["gradient_clip_norm"])
-        )
-        if not torch.isfinite(torch.as_tensor(gradient_norm)):
-            raise RuntimeError(f"non-finite gradient norm at step {step + 1}")
-        if wrapper is not None:
-            adapter_gradients = [parameter.grad for parameter in wrapper.adapter_parameters()]
-            if not adapter_gradients or any(gradient is None for gradient in adapter_gradients):
-                raise RuntimeError("trajectory adapter gradient is missing")
-            if not all(torch.isfinite(gradient).all() for gradient in adapter_gradients):
-                raise RuntimeError("trajectory adapter gradient is non-finite")
-        optimizer.step()
-        losses.append(float(loss.detach().float().cpu()))
-        gradient_norms.append(float(torch.as_tensor(gradient_norm).detach().float().cpu()))
-    torch.cuda.synchronize()
-    training_seconds = time.perf_counter() - training_started
-
     output_dir = args.output_dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    checkpoint = _save_trainable_checkpoint(
-        runner,
-        output_dir / "checkpoint",
-        experiment_id=args.experiment,
-        source_policy=policy_path,
-        config_digest=experiment["config_digest"],
-        optimizer_steps=optimizer_steps,
-    )
+    checkpoint: dict[str, Any] | None = None
+    training_seconds = 0.0
+    if optimizer_steps > 0:
+        trainable = [
+            parameter for parameter in runner.parameters() if parameter.requires_grad
+        ]
+        if not trainable:
+            raise RuntimeError("no trainable SmolVLA parameters were found")
+        optimizer = torch.optim.AdamW(
+            trainable,
+            lr=float(experiment["training"]["learning_rate"]),
+            betas=tuple(getattr(runtime_config, "optimizer_betas", (0.9, 0.95))),
+            eps=float(getattr(runtime_config, "optimizer_eps", 1e-8)),
+            weight_decay=float(getattr(runtime_config, "optimizer_weight_decay", 1e-10)),
+        )
+        runner.train()
+        training_started = time.perf_counter()
+        for step in range(optimizer_steps):
+            # Reset after adapter construction so E0/E1/E2 see identical FM noise/time RNG.
+            torch.manual_seed(base_seed + step)
+            torch.cuda.manual_seed_all(base_seed + step)
+            optimizer.zero_grad(set_to_none=True)
+            loss = _loss_from_output(runner(batch))
+            if loss.ndim != 0 or not torch.isfinite(loss):
+                raise RuntimeError(f"non-finite Stage-D loss at step {step + 1}")
+            loss.backward()
+            gradient_norm = torch.nn.utils.clip_grad_norm_(
+                trainable, float(experiment["training"]["gradient_clip_norm"])
+            )
+            if not torch.isfinite(torch.as_tensor(gradient_norm)):
+                raise RuntimeError(f"non-finite gradient norm at step {step + 1}")
+            if wrapper is not None:
+                adapter_gradients = [
+                    parameter.grad for parameter in wrapper.adapter_parameters()
+                ]
+                if not adapter_gradients or any(
+                    gradient is None for gradient in adapter_gradients
+                ):
+                    raise RuntimeError("trajectory adapter gradient is missing")
+                if not all(
+                    torch.isfinite(gradient).all() for gradient in adapter_gradients
+                ):
+                    raise RuntimeError("trajectory adapter gradient is non-finite")
+            optimizer.step()
+            losses.append(float(loss.detach().float().cpu()))
+            gradient_norms.append(
+                float(torch.as_tensor(gradient_norm).detach().float().cpu())
+            )
+        torch.cuda.synchronize()
+        training_seconds = time.perf_counter() - training_started
+        checkpoint = _save_trainable_checkpoint(
+            runner,
+            output_dir / "checkpoint",
+            experiment_id=args.experiment,
+            source_policy=policy_path,
+            config_digest=experiment["config_digest"],
+            optimizer_steps=optimizer_steps,
+        )
     runner.eval()
     rollout = _rollout(
         runner=runner,
@@ -487,8 +508,15 @@ def main() -> int:
         "schema_version": 1,
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
         "valid": True,
-        "scope": "bounded_real_demo_optimizer_smoke_and_one_closed_loop_rollout",
+        "scope": (
+            "pretrained_no_update_closed_loop_rollout_diagnostic"
+            if optimizer_steps == 0
+            else "bounded_real_demo_optimizer_smoke_and_one_closed_loop_rollout"
+        ),
         "experiment_id": args.experiment,
+        "source_policy": str(policy_path),
+        "inputs": str(args.inputs.resolve()),
+        "experiment_config_digest": experiment["config_digest"],
         "model_load_seconds": load_seconds,
         "optimizer_steps": optimizer_steps,
         "losses_not_cross_experiment_quality_metrics": losses,
@@ -505,7 +533,11 @@ def main() -> int:
         "gpu": _gpu_snapshot(),
         "python": {"version": platform.python_version(), "executable": sys.executable},
         "limitations": [
-            "Two optimizer steps on one real chunk validate plumbing, not useful model training.",
+            (
+                "This rollout uses the pinned pretrained E0 checkpoint without any optimizer update."
+                if optimizer_steps == 0
+                else "Two optimizer steps on one real chunk validate plumbing, not useful model training."
+            ),
             "E0/E1/E2 losses are not task-quality comparisons.",
             "One rollout is not a success-rate estimate.",
             "A completed rollout may pass Stage D even when task success is false.",
