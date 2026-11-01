@@ -107,12 +107,29 @@ def _load_probe_image(
     return np.flip(rgb, axis=(0, 1)).copy().astype(np.float32) / 255.0
 
 
-def _episode_has_instruction(row: dict[str, Any], instruction: str) -> bool:
-    tasks = row.get("tasks", [])
-    if isinstance(tasks, str):
-        tasks = [tasks]
+def _select_dataset_task(
+    tasks: Any,
+    instruction: str,
+    expected_task_index: int,
+) -> dict[str, Any]:
     wanted = normalized_instruction(instruction)
-    return any(normalized_instruction(str(task)) == wanted for task in tasks)
+    matches = [
+        {"task_index": int(row["task_index"]), "task": str(task)}
+        for task, row in tasks.iterrows()
+        if normalized_instruction(str(task)) == wanted
+    ]
+    if len(matches) != 1:
+        raise ValueError(
+            "Stage-B instruction must match exactly one pinned dataset task; "
+            f"found {len(matches)}"
+        )
+    selected = matches[0]
+    if selected["task_index"] != expected_task_index:
+        raise ValueError(
+            "Stage-B instruction maps to an unexpected pinned dataset task index: "
+            f"{selected['task_index']} != {expected_task_index}"
+        )
+    return selected
 
 
 def _first_frame_indices(dataset: Any, episodes: list[int]) -> dict[int, int]:
@@ -133,24 +150,35 @@ def _first_frame_indices(dataset: Any, episodes: list[int]) -> dict[int, int]:
     return found
 
 
-def _rank_episodes_by_initial_eef(
+def _rank_task_episodes_by_initial_eef(
     dataset: Any,
-    episodes: list[int],
+    dataset_task_index: int,
     target_eef_xyz_m: np.ndarray,
 ) -> list[dict[str, Any]]:
-    """Rank all same-task episodes without decoding or downloading videos."""
+    """Discover and rank target-task starts without downloading any videos."""
 
     view = dataset.select_columns(
-        ["episode_index", "frame_index", "observation.state"]
+        ["episode_index", "frame_index", "task_index", "observation.state"]
     )
-    wanted = set(episodes)
+    starts = view.filter(
+        lambda batch: [
+            scalar_int(frame, name="frame_index") == 0
+            and scalar_int(task, name="task_index") == dataset_task_index
+            for frame, task in zip(
+                batch["frame_index"], batch["task_index"], strict=True
+            )
+        ],
+        batched=True,
+        load_from_cache_file=False,
+    )
     ranked: list[dict[str, Any]] = []
-    for relative_index in range(len(view)):
-        row = view[relative_index]
+    seen: set[int] = set()
+    for relative_index in range(len(starts)):
+        row = starts[relative_index]
         episode = scalar_int(row["episode_index"], name="episode_index")
-        frame = scalar_int(row["frame_index"], name="frame_index")
-        if episode not in wanted or frame != 0:
-            continue
+        if episode in seen:
+            raise ValueError(f"episode {episode} has duplicate frame-zero rows")
+        seen.add(episode)
         state = np.asarray(row["observation.state"], dtype=np.float32).reshape(-1)
         if state.shape != (8,) or not np.isfinite(state).all():
             raise ValueError(f"episode {episode} has an invalid initial 8-D state")
@@ -162,10 +190,10 @@ def _rank_episodes_by_initial_eef(
                 ),
             }
         )
-    if len(ranked) != len(wanted):
-        found = {int(item["episode_index"]) for item in ranked}
+    if not ranked:
         raise ValueError(
-            f"same-task episodes missing frame-zero state: {sorted(wanted - found)}"
+            f"pinned LIBERO dataset has no frame-zero row for task_index "
+            f"{dataset_task_index}"
         )
     return sorted(ranked, key=lambda item: (item["eef_distance_m"], item["episode_index"]))
 
@@ -248,29 +276,60 @@ def main() -> int:
         root=dataset_root,
         revision=settings["dataset_revision"],
     )
-    candidate_episodes = metadata.filter_episodes(
-        lambda row: _episode_has_instruction(row, trajectory.instruction)
-    )
-    if not candidate_episodes:
-        raise ValueError("the pinned LIBERO dataset has no episode for the Stage-B instruction")
+    if metadata.tasks is None:
+        raise ValueError("the pinned LIBERO dataset exposes no task table")
+    task_match_path = output_root / "task_match.json"
+    expected_task_index = int(settings["expected_dataset_task_index"])
+    try:
+        dataset_task = _select_dataset_task(
+            metadata.tasks,
+            trajectory.instruction,
+            expected_task_index,
+        )
+    except Exception as exc:
+        _write_json(
+            task_match_path,
+            {
+                "schema_version": 1,
+                "valid": False,
+                "error": f"{type(exc).__name__}: {exc}",
+                "stage_b_instruction": trajectory.instruction,
+                "expected_dataset_task_index": expected_task_index,
+            },
+        )
+        raise
+    selected_task_text = str(dataset_task["task"])
 
-    # Download the small parquet rows for every same-task episode first, rank by
-    # frame-zero EEF, and only then fetch videos for the closest candidates.
+    # This pinned dataset's episode metadata has no task label. Download its
+    # small tabular parquet files (about 20 MB total), discover target-task
+    # frame-zero rows from task_index, then fetch videos only for the closest
+    # candidates. This avoids silently treating an empty metadata filter as a
+    # missing task while keeping the expensive video download bounded.
     tabular_dataset = LeRobotDataset(
         settings["dataset_repo_id"],
         root=dataset_root,
-        episodes=candidate_episodes,
         revision=settings["dataset_revision"],
         download_videos=False,
         video_backend=settings["video_backend"],
     )
-    eef_ranking = _rank_episodes_by_initial_eef(
-        tabular_dataset, candidate_episodes, probe_eef
+    eef_ranking = _rank_task_episodes_by_initial_eef(
+        tabular_dataset, expected_task_index, probe_eef
     )
     candidate_episodes = [
         int(item["episode_index"])
         for item in eef_ranking[: int(settings["candidate_episode_limit"])]
     ]
+    _write_json(
+        task_match_path,
+        {
+            "schema_version": 1,
+            "valid": True,
+            "stage_b_instruction": trajectory.instruction,
+            "selected": dict(dataset_task),
+            "target_episode_count": len(eef_ranking),
+            "video_candidate_episodes": candidate_episodes,
+        },
+    )
 
     chunk_size = int(settings["action_chunk_size"])
     action_dim = int(settings["action_dim"])
@@ -296,6 +355,12 @@ def main() -> int:
         state = np.asarray(sample["observation.state"], dtype=np.float32).reshape(-1)
         if state.shape != (8,):
             raise ValueError(f"LIBERO state must have shape (8,), got {state.shape}")
+        sample_task_index = scalar_int(sample["task_index"], name="task_index")
+        if sample_task_index != expected_task_index:
+            raise ValueError(
+                f"episode {episode} task_index changed: "
+                f"{sample_task_index} != {expected_task_index}"
+            )
         candidate_instruction = str(sample["task"])
         diagnostic = score_candidate_start(
             episode_index=episode,
@@ -307,7 +372,7 @@ def main() -> int:
             candidate_wrist=sample["observation.images.image2"],
             instruction_matches=(
                 normalized_instruction(candidate_instruction)
-                == normalized_instruction(trajectory.instruction)
+                == normalized_instruction(selected_task_text)
             ),
             thresholds=thresholds,
         )
@@ -446,6 +511,7 @@ def main() -> int:
             "observation_index": 0,
             "action_indices": list(range(chunk_size)),
             "task": str(selected["task"]),
+            "task_match": dict(dataset_task),
             "policy_path": str(policy_path),
             "policy_revision": config["stage_c"]["policy_revision"],
             "trajectory_source": trajectory.source,
@@ -472,6 +538,8 @@ def main() -> int:
             "frame_index": 0,
         },
         "trajectory_record": str(trajectory_dir),
+        "task_match": dict(dataset_task),
+        "task_match_diagnostics": str(task_match_path),
         "observation_match": dict(best),
         "match_diagnostics": str(match_diagnostics_path),
         "limitations": [
