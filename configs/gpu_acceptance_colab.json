@@ -57,6 +57,7 @@
     "target_task_id": 0,
     "target_init_state_id": 0,
     "expected_dataset_task_index": 34,
+    "probe_to_dataset_image_transform": "flip_horizontal",
     "candidate_episode_limit": 64,
     "action_chunk_size": 50,
     "action_dim": 7,
@@ -72,7 +73,7 @@
       "max_wrist_mae": 0.2,
       "min_score_margin": 0.02
     },
-    "note": "Automatic bounded pilot: LIBERO spatial task_id 0 is audited as global task_index 34 at the pinned dataset revision; all 45 task episodes are compared because initial object layout cannot be identified from EEF distance alone (hard cap 64). Then one matched real demonstration chunk, two optimizer steps, and one rollout run for each of E0/E1/E2. This is plumbing evidence, not useful training or a success-rate estimate."
+    "note": "Automatic bounded pilot: LIBERO spatial task_id 0 is audited as global task_index 34 at the pinned dataset revision. The direct OffScreenRenderEnv probe is horizontally flipped to match this pinned dataset revision (audited with episode 1500); all 45 task episodes are compared because initial object layout cannot be identified from EEF distance alone (hard cap 64). Then one matched real demonstration chunk, two optimizer steps, and one rollout run for each of E0/E1/E2. This is plumbing evidence, not useful training or a success-rate estimate."
   },
   "stage_e": {
     "command": null,

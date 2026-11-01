@@ -94,7 +94,11 @@ def _load_prior_evidence(run_dir: Path) -> tuple[dict[str, Any], dict[str, Any]]
 
 
 def _load_probe_image(
-    probe_dir: Path, manifest: dict[str, Any], camera_name: str
+    probe_dir: Path,
+    manifest: dict[str, Any],
+    camera_name: str,
+    *,
+    transform: str,
 ) -> np.ndarray:
     camera = manifest.get("cameras", {}).get(camera_name)
     if not camera or camera.get("valid") is not True:
@@ -103,8 +107,13 @@ def _load_probe_image(
     rgb = np.asarray(Image.open(image_path).convert("RGB"), dtype=np.uint8)
     if rgb.shape != (256, 256, 3):
         raise ValueError(f"unexpected probe RGB shape for {camera_name}: {rgb.shape}")
-    # LeRobot's LIBERO dataset and LiberoProcessorStep use this 180-degree convention.
-    return np.flip(rgb, axis=(0, 1)).copy().astype(np.float32) / 255.0
+    if transform == "flip_horizontal":
+        rgb = np.flip(rgb, axis=1)
+    elif transform == "rotate_180":
+        rgb = np.flip(rgb, axis=(0, 1))
+    elif transform != "none":
+        raise ValueError(f"unsupported probe-to-dataset image transform: {transform}")
+    return rgb.copy().astype(np.float32) / 255.0
 
 
 def _select_dataset_task(
@@ -262,9 +271,18 @@ def main() -> int:
     )
     robot_state = json.loads(robot_state_path.read_text(encoding="utf-8"))
     probe_eef = np.asarray(robot_state["robot0_eef_pos_m"], dtype=np.float32)
-    probe_agentview = _load_probe_image(probe_dir, probe_manifest, "agentview")
+    probe_image_transform = str(settings["probe_to_dataset_image_transform"])
+    probe_agentview = _load_probe_image(
+        probe_dir,
+        probe_manifest,
+        "agentview",
+        transform=probe_image_transform,
+    )
     probe_wrist = _load_probe_image(
-        probe_dir, probe_manifest, "robot0_eye_in_hand"
+        probe_dir,
+        probe_manifest,
+        "robot0_eye_in_hand",
+        transform=probe_image_transform,
     )
 
     from lerobot.datasets.dataset_metadata import LeRobotDatasetMetadata
@@ -425,6 +443,7 @@ def main() -> int:
                 "valid": False,
                 "error": f"{type(exc).__name__}: {exc}",
                 "thresholds": thresholds.__dict__,
+                "probe_to_dataset_image_transform": probe_image_transform,
                 "eef_prefilter": eef_ranking,
                 "candidates": diagnostics,
                 "comparison_previews": comparison_previews,
@@ -464,6 +483,7 @@ def main() -> int:
             "valid": True,
             "match_method": "thresholded_language_eef_and_two_view_rgb_not_exact_hash",
             "thresholds": thresholds.__dict__,
+            "probe_to_dataset_image_transform": probe_image_transform,
             "eef_prefilter": eef_ranking,
             "selected": dict(best),
             "candidates": diagnostics,
@@ -555,6 +575,7 @@ def main() -> int:
             "trajectory_id": trajectory.trajectory_id,
             "trajectory_record": str(trajectory_dir),
             "observation_match": dict(best),
+            "probe_to_dataset_image_transform": probe_image_transform,
             "agentview_decoded_sha256": image_sha256(selected_agentview),
             "wrist_decoded_sha256": image_sha256(selected_wrist),
         },
@@ -578,6 +599,7 @@ def main() -> int:
         "task_match": dict(dataset_task),
         "task_match_diagnostics": str(task_match_path),
         "observation_match": dict(best),
+        "probe_to_dataset_image_transform": probe_image_transform,
         "match_diagnostics": str(match_diagnostics_path),
         "limitations": [
             "This is one matched initial demonstration chunk for optimizer/rollout plumbing only.",

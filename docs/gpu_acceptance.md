@@ -56,7 +56,7 @@ Stage D 已配置，不需要手填 policy、dataset 或 batch 路径。执行 0
 
 1. 从 Stage B/C ledger 自动解析 prediction trajectory、原始 probe 和本地 SmolVLA checkpoint；
 2. 从固定 `lerobot/libero@a1aaacb7f6cd6ee5fb43120f673cebb0cfea7dd4` 中筛选同语言候选 episode；
-3. 用初始 EEF 与 agentview/wrist 解码图像差异选择唯一匹配，匹配不通过时不会加载模型训练；
+3. 将直连 `OffScreenRenderEnv` probe 图像水平翻转到该固定数据集的实际图像约定，再用初始 EEF 与全部同任务 episode 的 agentview/wrist 解码图像差异选择唯一匹配；匹配不通过时不会加载模型训练；
 4. 生成带真实 demonstration `50×7` action target、prediction trajectory condition 和因果 metadata 的单 batch；
 5. E0/E1/E2 各自从同一 checkpoint 开始，用相同 batch 与逐 step RNG seed 完成 2 个 optimizer step；
 6. 每组运行一次 `libero_spatial` task0/init0 闭环并保存 action/EEF trace、稀疏截图、耗时和显存。
