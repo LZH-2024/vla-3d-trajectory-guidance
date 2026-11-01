@@ -23,6 +23,7 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from trajectory_guidance.libero_probe import (
+    json_ready,
     prepare_libero_config,
     save_depth_preview,
     sha256_file,
@@ -405,7 +406,14 @@ def main() -> int:
             "cameras": camera_results,
         }
         manifest_path = write_json(output_dir / "observation_manifest.json", manifest)
-        print(json.dumps(manifest, ensure_ascii=False, indent=2, allow_nan=False))
+        print(
+            json.dumps(
+                json_ready(manifest),
+                ensure_ascii=False,
+                indent=2,
+                allow_nan=False,
+            )
+        )
         print(f"\nManifest: {manifest_path}")
         return 0 if all_valid else 2
     finally:

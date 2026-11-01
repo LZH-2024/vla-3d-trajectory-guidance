@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 import sys
 import unittest
 
@@ -7,6 +8,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from trajectory_guidance.libero_probe import (
+    json_ready,
     squeeze_depth_map,
     transform_points,
     unproject_depth_sample,
@@ -16,6 +18,19 @@ from trajectory_guidance.libero_probe import (
 
 
 class LiberoProbeTests(unittest.TestCase):
+    def test_json_ready_converts_nested_numpy_values(self) -> None:
+        payload = {
+            "action": np.array([0.0, -1.0], dtype=np.float64),
+            "count": np.int64(2),
+            "nested": [np.float32(0.5)],
+        }
+
+        converted = json_ready(payload)
+
+        self.assertEqual(converted["action"], [0.0, -1.0])
+        self.assertEqual(converted["count"], 2)
+        json.dumps(converted, allow_nan=False)
+
     def test_depth_buffer_accepts_libero_singleton_channel(self) -> None:
         depth = np.linspace(0.1, 0.9, 16, dtype=np.float32).reshape(4, 4, 1)
 
